@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Root ROI Map 自动分割 & 标注工具</title>
+  <title>Root ROI Map Annotator v2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
@@ -121,6 +121,7 @@
       padding-bottom: 0.6rem;
       border-bottom: 1px dashed #1f2937;
     }
+
     .section:last-child {
       border-bottom: none;
       margin-bottom: 0;
@@ -204,6 +205,10 @@
       color: #fecaca;
     }
 
+    .button.icon {
+      padding: 0.15rem 0.35rem;
+    }
+
     .button:hover {
       border-color: var(--accent);
       background: #020617;
@@ -249,7 +254,7 @@
     }
 
     #maskCanvas {
-      image-rendering: pixelated;
+      image-rendering: auto;
       border-radius: 0.6rem;
       box-shadow: 0 14px 35px rgba(0, 0, 0, 0.75);
       position: absolute;
@@ -355,121 +360,127 @@
 <body>
   <header>
     <div>
-      <h1>Root ROI Map Annotator</h1>
-      <span>黑线轮廓 PNG/SVG → 自动分割 ROI → 点击/框选标注 → 导出 JSON / PNG</span>
+      <h1>Root ROI Map Annotator v2</h1>
+      <span>Black-outline PNG/SVG → automatic ROI segmentation → labeling → JSON/PNG export</span>
     </div>
     <div class="pill">
-      <span>左键：点击/框选</span>
-      <span>右键拖动：平移</span>
-      <span>滚轮：缩放</span>
+      <span>Click mode: click ROIs</span>
+      <span>Box mode: drag rectangle</span>
+      <span>Move mode: drag canvas</span>
+      <span>Wheel zoom: center at mouse</span>
     </div>
   </header>
 
   <main>
-    <!-- 左侧：输入与导入/导出 -->
+    <!-- Left panel -->
     <aside class="panel">
       <div class="panel-header">
-        <div class="panel-title">输入 & 文件</div>
+        <div class="panel-title">Input & Files</div>
       </div>
       <div class="panel-body">
         <div class="section">
-          <div class="section-title">1. 导入根模板图像</div>
-          <label for="maskFileInput">PNG / JPEG / SVG（黑色轮廓 + 白色背景）</label>
+          <div class="section-title">1. Root template image</div>
+          <label for="maskFileInput">PNG / JPEG / SVG (black outlines + white background)</label>
           <input type="file" id="maskFileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
           <div class="hint">
-            建议从 PDF 导出为纯黑线 + 白底的 SVG 或高分辨率 PNG。脚本会把黑线当作边界，对白色区域做连通域分割，最大的白色连通域视为外部背景。
+            Recommended: export your root PDF as a pure black-outline + white-background SVG or high-resolution PNG.
+            Dark pixels are treated as boundaries, white regions are segmented by connected components, and the largest
+            white region is treated as the outside background.
           </div>
           <div id="maskInfo" class="status-line"></div>
         </div>
 
         <div class="section">
-          <div class="section-title">2. 导入/导出标注</div>
+          <div class="section-title">2. Import / Export annotations</div>
           <div class="row">
-            <button class="button small primary" id="exportJsonBtn">导出标注 JSON</button>
-            <button class="button small" id="exportPngBtn">导出着色 PNG</button>
+            <button class="button small primary" id="exportJsonBtn">Export annotations JSON</button>
+            <button class="button small" id="exportPngBtn">Export colored PNG</button>
           </div>
-          <label for="annotationFileInput">导入标注 JSON</label>
+          <label for="annotationFileInput">Import annotations JSON</label>
           <input type="file" id="annotationFileInput" accept="application/json,.json" />
           <div class="hint">
-            JSON 中保存：标签列表（名称+颜色）、每个 ROI 的标签 ID 以及图像尺寸。再次加载相同模板时可恢复标注。
+            JSON stores: label list (name + color), label assignment for each ROI, and image size.
+            Reload the same template image to restore annotations.
           </div>
         </div>
 
         <div class="section">
-          <div class="section-title">3. 交互模式</div>
+          <div class="section-title">3. Interaction mode</div>
           <div class="row">
-            <button class="button small primary" id="modeClickBtn">单击 ROI</button>
-            <button class="button small" id="modeBoxBtn">框选 ROI</button>
+            <button class="button small primary" id="modeClickBtn">Click mode</button>
+            <button class="button small" id="modeBoxBtn">Box mode</button>
+            <button class="button small" id="modeMoveBtn">Move mode</button>
           </div>
           <div id="modeStatus" class="status-line"></div>
         </div>
       </div>
     </aside>
 
-    <!-- 中间：画布 -->
+    <!-- Center canvas -->
     <section class="panel">
       <div class="panel-header">
         <div>
-          <div class="panel-title">ROI Map 视图</div>
-          <div class="panel-subtitle">自动分割后的 ROI 在这里显示，可点击/框选标注</div>
+          <div class="panel-title">ROI Map View</div>
+          <div class="panel-subtitle">Automatically segmented ROIs. Supports click / box-select / move.</div>
         </div>
-        <div id="hoverInfo" class="pill">未加载图像</div>
+        <div id="hoverInfo" class="pill">No image loaded</div>
       </div>
       <div id="canvasContainer">
         <canvas id="maskCanvas"></canvas>
         <canvas id="overlayCanvas"></canvas>
         <div id="emptyState" class="empty-state">
-          请先在左侧上传一张根模板图片（PNG/JPEG/SVG，黑线轮廓 + 白底）。<br /><br />
-          加载后工具会：<br />
-          · 自动识别每个封闭白色区域作为 ROI<br />
-          · 最大的外部区域视为背景忽略<br />
-          然后你可以创建标签，并对 ROI 进行标注。
+          Please upload a root template image (PNG/JPEG/SVG, black outlines + white background) on the left.<br /><br />
+          After loading, the tool will:<br />
+          · Automatically detect each closed white region as one ROI (non-closed internal regions are not separated)<br />
+          · Treat the largest outer white region as background and ignore it<br />
+          Then you can create labels and annotate ROIs.
         </div>
       </div>
     </section>
 
-    <!-- 右侧：标签管理 -->
+    <!-- Right panel: labels -->
     <aside class="panel">
       <div class="panel-header">
-        <div class="panel-title">标签 & 统计</div>
-        <button class="button small danger" id="clearAllBtn">清空标签</button>
+        <div class="panel-title">Labels & Stats</div>
+        <button class="button small danger" id="clearAllBtn">Clear labels</button>
       </div>
       <div class="panel-body">
         <div class="section">
-          <div class="section-title">1. 新建标签</div>
-          <label for="labelNameInput">标签名称</label>
-          <input type="text" id="labelNameInput" placeholder="例：Meristem / Cortex / QC 等" />
-          <label for="labelColorInput">标签颜色</label>
-          <input type="color" id="labelColorInput" value="#ff5c7a" />
-          <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">添加标签</button>
+          <div class="section-title">1. Create label</div>
+          <label for="labelNameInput">Label name</label>
+          <input type="text" id="labelNameInput" placeholder="e.g. Meristem / Cortex / QC" />
+          <label for="labelColorInput">Label color</label>
+          <input type="color" id="labelColorInput" />
+          <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">Add label</button>
           <div class="hint">
-            新建标签后，在标签列表中点击选择为“当前标签”，然后在中间画布点击/框选 ROI 即可赋予该标签。
+            After creating a label, click it in the list to toggle it as the “current label” (click again to deselect).
+            When no label is active, clicking/box-selecting an ROI only clears its existing label (if any).
           </div>
         </div>
 
         <div class="section">
-          <div class="section-title">2. 标签列表</div>
+          <div class="section-title">2. Label list</div>
           <div id="labelList"></div>
           <div id="labelEmptyHint" class="hint">
-            还没有标签，请先创建一个标签。
+            No labels yet. Please create at least one label.
           </div>
         </div>
 
         <div class="section">
-          <div class="section-title">3. 全局统计</div>
-          <div id="globalStats" class="hint">尚未加载图像。</div>
+          <div class="section-title">3. Global stats</div>
+          <div id="globalStats" class="hint">No image loaded yet.</div>
         </div>
       </div>
     </aside>
   </main>
 
   <footer>
-    <div>提示：外部最大的白色连通区域会被视作背景并忽略。</div>
-    <div id="selectionStatus">未选择 ROI</div>
+    <div>Note: the largest white connected region is treated as outside background and ignored.</div>
+    <div id="selectionStatus">No ROI selected</div>
   </footer>
 
   <script>
-    // ===== 全局状态 =====
+    // ===== Global state =====
     const maskCanvas = document.getElementById("maskCanvas");
     const overlayCanvas = document.getElementById("overlayCanvas");
     const ctx = maskCanvas.getContext("2d");
@@ -487,6 +498,7 @@
 
     const modeClickBtn = document.getElementById("modeClickBtn");
     const modeBoxBtn = document.getElementById("modeBoxBtn");
+    const modeMoveBtn = document.getElementById("modeMoveBtn");
 
     const addLabelBtn = document.getElementById("addLabelBtn");
     const labelNameInput = document.getElementById("labelNameInput");
@@ -502,35 +514,54 @@
     let imgHeight = 0;
     let maskLoaded = false;
 
-    // 每个像素的 ROI ID（0=背景，1..N）
+    // ROI ID per pixel (0 = background, 1..N)
     let roiLabelData = null;
     let roiCount = 0;
 
-    // 标签
+    // ROI → pixel list & centroid (for hover float effect)
+    let roiPixelMap = {}; // roiId -> {pixels: [{x,y}, ...], cx, cy}
+
+    // Labels
     let labels = [];       // {id, name, color}
     let activeLabelId = null;
     let roiAssignments = {}; // { roiId: labelId }
 
-    // 交互模式
-    let interactionMode = "click"; // "click" | "box"
-    let isDragging = false;
+    // Default color palette
+    const defaultColors = [
+      "#ef4444","#f97316","#facc15","#22c55e","#14b8a6",
+      "#0ea5e9","#6366f1","#8b5cf6","#ec4899","#f97373"
+    ];
+    let colorIndex = 0;
+
+    // Interaction mode
+    let interactionMode = "click"; // "click" | "box" | "move"
+    let isDragging = false;        // for box selection
     let dragStart = null;
     let dragCurrent = null;
 
-    // 视图缩放和平移
-    let baseScale = 1;   // 自动按容器居中时的基础 scale
-    let viewScale = 1;   // 用户滚轮调节的缩放倍数
+    // View transform (zoom & pan)
+    let baseScale = 1;
+    let viewScale = 1;
     const minScale = 0.3;
     const maxScale = 5;
-    let panX = 0;        // 额外平移（px）
+    let panX = 0;
     let panY = 0;
+
+    // Move mode (drag canvas)
     let isPanning = false;
     let panStartClientX = 0;
     let panStartClientY = 0;
     let panStartX = 0;
     let panStartY = 0;
 
-    // ===== 工具函数 =====
+    // Hover float animation
+    let hoveredRoiId = 0;
+    let hoverScaleCurrent = 1.0;
+    let hoverScaleTarget = 1.0;
+    const hoverScaleMax = 1.05;
+    const hoverAnimSpeed = 8.0; // approach speed
+
+    // ===== Utility functions =====
     function hexToRgb(hex) {
       hex = hex.replace("#", "");
       if (hex.length === 3) {
@@ -544,24 +575,35 @@
       };
     }
 
+    function getNextColor() {
+      const color = defaultColors[colorIndex % defaultColors.length];
+      colorIndex++;
+      return color;
+    }
+
     function setMaskInfo(text) {
       maskInfo.textContent = text || "";
     }
 
     function setInteractionMode(mode) {
       interactionMode = mode;
-      modeStatus.innerHTML =
-        mode === "click"
-          ? "当前模式：<strong>单击 ROI</strong>（点击一个封闭区域，赋予当前标签；右键拖动可平移）"
-          : "当前模式：<strong>框选 ROI</strong>（拖出矩形，为其中所有 ROI 赋予当前标签；右键拖动可平移）";
 
       modeClickBtn.classList.toggle("primary", mode === "click");
       modeBoxBtn.classList.toggle("primary", mode === "box");
+      modeMoveBtn.classList.toggle("primary", mode === "move");
+
+      if (mode === "click") {
+        modeStatus.innerHTML = "Mode: <strong>Click</strong>. Click an ROI to label/unlabel it according to the current label.";
+      } else if (mode === "box") {
+        modeStatus.innerHTML = "Mode: <strong>Box</strong>. Drag a rectangle to batch label/unlabel all ROIs inside.";
+      } else {
+        modeStatus.innerHTML = "Mode: <strong>Move</strong>. Hold left mouse button to pan the view, use wheel to zoom at mouse.";
+      }
     }
 
     function updateGlobalStats() {
       if (!maskLoaded || !roiLabelData) {
-        globalStats.textContent = "尚未加载图像。";
+        globalStats.textContent = "No image loaded yet.";
         return;
       }
       const used = new Set();
@@ -575,13 +617,13 @@
           .map(k => parseInt(k, 10))
       );
       const labeled = labeledSet.size;
-      globalStats.innerHTML = `ROI 总数：<strong>${total}</strong><br/>已标注 ROI：<strong>${labeled}</strong>（${
+      globalStats.innerHTML = `Total ROIs: <strong>${total}</strong><br/>Labeled ROIs: <strong>${labeled}</strong> (${
         total ? (labeled / total * 100).toFixed(1) : 0
-      }%）`;
+      }%)`;
     }
 
     function updateSelectionStatus(text) {
-      selectionStatus.textContent = text || "未选择 ROI";
+      selectionStatus.textContent = text || "No ROI selected";
     }
 
     function resizeCanvases(width, height) {
@@ -590,7 +632,6 @@
       overlayCanvas.width = width;
       overlayCanvas.height = height;
 
-      // Canvas 的 CSS 尺寸先设为图像原始尺寸，缩放交给 transform
       maskCanvas.style.width = width + "px";
       maskCanvas.style.height = height + "px";
       overlayCanvas.style.width = width + "px";
@@ -653,24 +694,45 @@
         const main = document.createElement("div");
         main.className = "label-main";
         const nameDiv = document.createElement("div");
-        nameDiv.textContent = label.name || "(未命名)";
+        nameDiv.textContent = label.name || "(Untitled)";
         const metaDiv = document.createElement("div");
-        metaDiv.textContent = `ID: ${label.id} · ROI: ${counts[label.id] || 0}`;
+        metaDiv.textContent = `ID: ${label.id} · ROIs: ${counts[label.id] || 0}`;
 
         main.appendChild(nameDiv);
         main.appendChild(metaDiv);
 
+        const rightBox = document.createElement("div");
+        rightBox.style.display = "flex";
+        rightBox.style.alignItems = "center";
+        rightBox.style.gap = "0.25rem";
+
         const badge = document.createElement("div");
         badge.className = "badge";
-        badge.textContent = "当前";
+        badge.textContent = "Active";
         if (label.id !== activeLabelId) badge.style.visibility = "hidden";
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "button small icon";
+        delBtn.textContent = "×";
+        delBtn.title = "Delete label";
+        delBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteLabel(label.id);
+        });
+
+        rightBox.appendChild(badge);
+        rightBox.appendChild(delBtn);
 
         item.appendChild(colorDot);
         item.appendChild(main);
-        item.appendChild(badge);
+        item.appendChild(rightBox);
 
         item.addEventListener("click", () => {
-          activeLabelId = label.id;
+          if (activeLabelId === label.id) {
+            activeLabelId = null; // clicking again toggles off
+          } else {
+            activeLabelId = label.id;
+          }
           refreshLabelList();
         });
 
@@ -678,14 +740,32 @@
       });
     }
 
-    function addLabel(name, color) {
+    function deleteLabel(labelId) {
+      labels = labels.filter(l => l.id !== labelId);
+      if (activeLabelId === labelId) activeLabelId = null;
+      // remove assignments of this label
+      for (const [roiId, lid] of Object.entries(roiAssignments)) {
+        if (lid === labelId) {
+          delete roiAssignments[roiId];
+        }
+      }
+      refreshLabelList();
+      updateGlobalStats();
+      renderBase();
+      renderOverlay();
+    }
+
+    function addLabel(name, colorInputValue) {
+      const color = colorInputValue || getNextColor();
       const id = "L" + (labels.length + 1);
       labels.push({ id, name: name || `Label ${labels.length + 1}`, color });
       activeLabelId = id;
       refreshLabelList();
+      // next default color
+      labelColorInput.value = getNextColor();
     }
 
-    // ===== 自动分割：黑线为边界，白区为 ROI =====
+    // ===== Segmentation: dark pixels = boundary, white connected regions = ROIs =====
     function segmentImageToRois() {
       const imageData = ctx.getImageData(0, 0, imgWidth, imgHeight);
       const data = imageData.data;
@@ -694,7 +774,7 @@
       const labelsArr = new Int32Array(pixels);
       const isBoundary = new Uint8Array(pixels);
 
-      // 判断边界像素（黑线 / 深色）
+      // mark boundary pixels
       for (let i = 0; i < pixels; i++) {
         const r = data[i * 4];
         const g = data[i * 4 + 1];
@@ -702,7 +782,6 @@
         const a = data[i * 4 + 3];
 
         const brightness = (r + g + b) / 3;
-        // 亮度 < 某阈值视为线条；阈值可根据图像适当调整
         if (a > 0 && brightness < 220) {
           isBoundary[i] = 1;
         }
@@ -719,7 +798,7 @@
         stack.push(idx);
       }
 
-      // 4-邻域连通域标记
+      // 4-connected component labeling (on non-boundary pixels)
       for (let i = 0; i < pixels; i++) {
         if (isBoundary[i]) continue;
         if (labelsArr[i] !== 0) continue;
@@ -739,7 +818,7 @@
         }
       }
 
-      // 统计面积，找最大连通区域（外部背景）
+      // find largest region → background
       const areas = new Array(currentLabel + 1).fill(0);
       for (let i = 0; i < pixels; i++) {
         const l = labelsArr[i];
@@ -755,7 +834,7 @@
         }
       }
 
-      // 重新映射 label：外部背景 -> 0，其余 -> 1..N
+      // remap labels: largest region → 0 (background), others → 1..N
       const labelMap = new Int32Array(currentLabel + 1);
       let newId = 1;
       for (let l = 1; l <= currentLabel; l++) {
@@ -767,18 +846,45 @@
       }
 
       roiLabelData = new Uint16Array(pixels);
+      roiCount = newId - 1;
+      roiPixelMap = {};
+
       for (let i = 0; i < pixels; i++) {
         const old = labelsArr[i];
-        roiLabelData[i] = labelMap[old];
+        const newVal = labelMap[old];
+        roiLabelData[i] = newVal;
+        if (newVal > 0) {
+          const x = i % imgWidth;
+          const y = (i / imgWidth) | 0;
+          if (!roiPixelMap[newVal]) {
+            roiPixelMap[newVal] = { pixels: [], cx: 0, cy: 0 };
+          }
+          roiPixelMap[newVal].pixels.push({ x, y });
+        }
       }
-      roiCount = newId - 1;
 
-      setMaskInfo(`自动分割完成：检测到 ${roiCount} 个非背景 ROI（排除外部背景）`);
+      // compute centroid for each ROI
+      for (const [idStr, obj] of Object.entries(roiPixelMap)) {
+        const arr = obj.pixels;
+        let sx = 0, sy = 0;
+        for (const p of arr) {
+          sx += p.x;
+          sy += p.y;
+        }
+        const n = arr.length || 1;
+        obj.cx = sx / n;
+        obj.cy = sy / n;
+      }
+
+      setMaskInfo(`Segmentation done: found ${roiCount} non-background ROIs (outer background removed).`);
       updateGlobalStats();
+
+      // clear original raster; from now on we fully redraw
+      ctx.clearRect(0, 0, imgWidth, imgHeight);
     }
 
-    // ===== 根据 ROI + 标签渲染画布 =====
-    function renderMaskWithLabels() {
+    // ===== Base map render (no hover/box) =====
+    function renderBase() {
       if (!maskLoaded || !roiLabelData) return;
 
       const imageData = ctx.createImageData(imgWidth, imgHeight);
@@ -813,10 +919,16 @@
       }
 
       ctx.putImageData(imageData, 0, 0);
+      updateGlobalStats();
+      refreshLabelList();
+    }
 
-      // overlay 清空 & 重画框选矩形
+    // ===== Overlay render (box selection + hover float) =====
+    function renderOverlay() {
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-      if (isDragging && dragStart && dragCurrent) {
+
+      // Box selection rectangle
+      if (isDragging && dragStart && dragCurrent && interactionMode === "box") {
         overlayCtx.save();
         overlayCtx.setLineDash([4, 3]);
         overlayCtx.lineWidth = 1.5;
@@ -833,11 +945,31 @@
         overlayCtx.restore();
       }
 
-      updateGlobalStats();
-      refreshLabelList();
+      // Hover float effect
+      if (hoveredRoiId > 0 && roiPixelMap[hoveredRoiId]) {
+        const obj = roiPixelMap[hoveredRoiId];
+        const { pixels, cx, cy } = obj;
+        const labelId = roiAssignments[hoveredRoiId];
+        let baseColor = "#ffffff";
+        if (labelId) {
+          const label = labels.find(l => l.id === labelId);
+          baseColor = label ? label.color : "#ffffff";
+        }
+        const { r, g, b } = hexToRgb(baseColor);
+        overlayCtx.fillStyle = `rgba(${Math.min(r+40,255)},${Math.min(g+40,255)},${Math.min(b+40,255)},0.9)`;
+
+        const s = hoverScaleCurrent;
+        for (const p of pixels) {
+          const dx = p.x - cx;
+          const dy = p.y - cy;
+          const nx = cx + dx * s;
+          const ny = cy + dy * s;
+          overlayCtx.fillRect(nx, ny, 1, 1);
+        }
+      }
     }
 
-    // 将鼠标坐标映射到图像像素
+    // ===== Mouse position → image pixel =====
     function canvasPixelFromEvent(evt) {
       const rect = maskCanvas.getBoundingClientRect();
       const scaleX = maskCanvas.width / rect.width;
@@ -855,9 +987,42 @@
       return roiLabelData[idx];
     }
 
-    function assignLabelToRoi(roiId, labelId) {
-      if (roiId <= 0 || !labelId) return;
-      roiAssignments[roiId] = labelId;
+    function toggleOrAssignLabelForRoi(roiId) {
+      if (roiId <= 0) return;
+      const current = roiAssignments[roiId];
+      if (activeLabelId) {
+        if (current === activeLabelId) {
+          // same label → remove
+          delete roiAssignments[roiId];
+        } else {
+          // assign/overwrite with active label
+          roiAssignments[roiId] = activeLabelId;
+        }
+      } else {
+        // no active label: only remove if there is one
+        if (current) {
+          delete roiAssignments[roiId];
+        }
+      }
+    }
+
+    function toggleOrAssignLabelForRoiBatch(roiIds) {
+      if (!roiIds.length) return;
+      roiIds.forEach(roiId => {
+        if (roiId <= 0) return;
+        const current = roiAssignments[roiId];
+        if (activeLabelId) {
+          if (current === activeLabelId) {
+            delete roiAssignments[roiId];
+          } else {
+            roiAssignments[roiId] = activeLabelId;
+          }
+        } else {
+          if (current) {
+            delete roiAssignments[roiId];
+          }
+        }
+      });
     }
 
     function getRoiIdsInRect(x1, y1, x2, y2) {
@@ -876,43 +1041,53 @@
       return Array.from(set);
     }
 
-    // ===== 事件绑定 =====
-
-    // 上传模板图像（PNG/JPEG/SVG）
+    // ===== Image load =====
     maskFileInput.addEventListener("change", e => {
       const file = e.target.files[0];
       if (!file) return;
 
       const img = new Image();
       img.onload = () => {
-        imgWidth = img.width;
-        imgHeight = img.height;
+        // upscale small images slightly to get a more "vector-like" feel
+        let targetWidth = img.width;
+        let targetHeight = img.height;
+        const maxDim = 2000;
+        const scale = Math.min(maxDim / img.width, maxDim / img.height, 1.5);
+        if (scale > 1) {
+          targetWidth = Math.round(img.width * scale);
+          targetHeight = Math.round(img.height * scale);
+        }
+
+        imgWidth = targetWidth;
+        imgHeight = targetHeight;
         resizeCanvases(imgWidth, imgHeight);
 
+        // draw image for segmentation
         ctx.clearRect(0, 0, imgWidth, imgHeight);
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, imgWidth, imgHeight);
 
         emptyState.style.display = "none";
         maskLoaded = true;
 
-        // 自动分割 & 渲染
+        // segmentation & redraw
         segmentImageToRois();
-        renderMaskWithLabels();
-        hoverInfo.textContent = `尺寸：${imgWidth}×${imgHeight} · ROI 数约 ${roiCount}`;
-        setMaskInfo(`已加载：${file.name} · ROI 数约 ${roiCount}`);
+        renderBase();
+        renderOverlay();
+        hoverInfo.textContent = `Size: ${imgWidth} × ${imgHeight} · ~${roiCount} ROIs`;
+        setMaskInfo(`Loaded: ${file.name} · ~${roiCount} ROIs`);
         roiAssignments = {};
-        updateSelectionStatus("未选择 ROI");
+        updateSelectionStatus("No ROI selected");
       };
 
       img.onerror = () => {
-        alert("无法加载该图片，请确认是黑线+白底的 PNG/JPEG/SVG。");
+        alert("Failed to load image. Please ensure it is a black-outline + white-background PNG/JPEG/SVG.");
       };
 
       const url = URL.createObjectURL(file);
       img.src = url;
     });
 
-    // 导入标注 JSON
+    // Import annotations JSON
     annotationFileInput.addEventListener("change", e => {
       const file = e.target.files[0];
       if (!file) return;
@@ -921,7 +1096,7 @@
         try {
           const json = JSON.parse(evt.target.result);
           if (!json.labels || !json.roiAssignments) {
-            alert("JSON 格式不正确（缺少 labels 或 roiAssignments）。");
+            alert("Invalid JSON (missing 'labels' or 'roiAssignments').");
             return;
           }
           labels = json.labels;
@@ -929,74 +1104,82 @@
           activeLabelId = labels.length ? labels[0].id : null;
           refreshLabelList();
           updateGlobalStats();
-          renderMaskWithLabels();
-          alert("标注 JSON 导入成功。请确保你加载的是相同的根模板图像。");
+          renderBase();
+          renderOverlay();
+          alert("Annotations imported. Make sure you loaded the same root template image.");
         } catch (err) {
           console.error(err);
-          alert("解析 JSON 出错，请检查文件是否为本工具导出的标注。");
+          alert("Failed to parse JSON. Please check that this is an annotation file exported from this tool.");
         }
       };
       reader.readAsText(file);
     });
 
-    // 新建标签
+    // Create label
     addLabelBtn.addEventListener("click", () => {
       const name = labelNameInput.value.trim();
-      const color = labelColorInput.value || "#ff5c7a";
+      const color = labelColorInput.value || getNextColor();
       addLabel(name, color);
       labelNameInput.value = "";
+      renderBase();
+      renderOverlay();
     });
 
-    // 清空标签 & 标注
+    // Clear labels + assignments
     clearAllBtn.addEventListener("click", () => {
-      if (!maskLoaded) {
-        labels = [];
-        roiAssignments = {};
-        activeLabelId = null;
-        refreshLabelList();
-        updateGlobalStats();
-        renderMaskWithLabels();
-        return;
-      }
-      if (confirm("确定要清空所有标签和 ROI 标注吗？")) {
-        labels = [];
-        roiAssignments = {};
-        activeLabelId = null;
-        refreshLabelList();
-        updateGlobalStats();
-        renderMaskWithLabels();
-      }
+      labels = [];
+      roiAssignments = {};
+      activeLabelId = null;
+      refreshLabelList();
+      updateGlobalStats();
+      renderBase();
+      renderOverlay();
     });
 
-    // 模式切换
+    // Mode switching
     modeClickBtn.addEventListener("click", () => setInteractionMode("click"));
     modeBoxBtn.addEventListener("click", () => setInteractionMode("box"));
+    modeMoveBtn.addEventListener("click", () => setInteractionMode("move"));
 
-    // 防止右键菜单
-    canvasContainer.addEventListener("contextmenu", e => e.preventDefault());
-
-    // 滚轮缩放（以中心为基准）
+    // Wheel zoom (centered at mouse)
     canvasContainer.addEventListener("wheel", e => {
       if (!maskLoaded) return;
       e.preventDefault();
-      const delta = e.deltaY;
-      const factor = delta > 0 ? 0.9 : 1.1;
-      viewScale *= factor;
-      if (viewScale < minScale) viewScale = minScale;
-      if (viewScale > maxScale) viewScale = maxScale;
+      const rect = canvasContainer.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const oldScale = baseScale * viewScale;
+      const factor = e.deltaY > 0 ? 0.9 : 1.1;
+      let newViewScale = viewScale * factor;
+      if (newViewScale < minScale) newViewScale = minScale;
+      if (newViewScale > maxScale) newViewScale = maxScale;
+      const newScale = baseScale * newViewScale;
+
+      const tx = (rect.width - imgWidth * oldScale) / 2 + panX;
+      const ty = (rect.height - imgHeight * oldScale) / 2 + panY;
+      const imgX = (mouseX - tx) / oldScale;
+      const imgY = (mouseY - ty) / oldScale;
+
+      const newTx = mouseX - imgX * newScale;
+      const newTy = mouseY - imgY * newScale;
+
+      panX = newTx - (rect.width - imgWidth * newScale) / 2;
+      panY = newTy - (rect.height - imgHeight * newScale) / 2;
+      viewScale = newViewScale;
       updateViewTransform();
     }, { passive: false });
 
-    // 右键拖动：平移
+    // Move mode: drag canvas with left mouse
     canvasContainer.addEventListener("mousedown", e => {
       if (!maskLoaded) return;
-      if (e.button === 2) { // 右键
-        isPanning = true;
-        panStartClientX = e.clientX;
-        panStartClientY = e.clientY;
-        panStartX = panX;
-        panStartY = panY;
-      }
+      if (e.button !== 0) return;
+      if (interactionMode !== "move") return;
+      isPanning = true;
+      panStartClientX = e.clientX;
+      panStartClientY = e.clientY;
+      panStartX = panX;
+      panStartY = panY;
     });
 
     window.addEventListener("mousemove", e => {
@@ -1010,68 +1193,82 @@
     });
 
     window.addEventListener("mouseup", e => {
-      if (e.button === 2 && isPanning) {
+      if (isPanning && e.button === 0) {
         isPanning = false;
       }
     });
 
-    // 左键在画布上的交互（点击/框选）
+    // Canvas hover + click/box
     maskCanvas.addEventListener("mousemove", e => {
       if (!maskLoaded || !roiLabelData) return;
       const p = canvasPixelFromEvent(e);
       if (!p) return;
       const roiId = getRoiIdAt(p.x, p.y);
       if (roiId === 0) {
-        hoverInfo.textContent = `位置：(${p.x}, ${p.y}) · 背景`;
+        hoverInfo.textContent = `Pos: (${p.x}, ${p.y}) · Background`;
       } else {
         const labelId = roiAssignments[roiId];
         const labelName = labelId
           ? (labels.find(l => l.id === labelId)?.name || labelId)
-          : "未标注";
-        hoverInfo.textContent = `位置：(${p.x}, ${p.y}) · ROI ID: ${roiId} · 标签：${labelName}`;
+          : "Unlabeled";
+        hoverInfo.textContent = `Pos: (${p.x}, ${p.y}) · ROI ID: ${roiId} · Label: ${labelName}`;
       }
 
-      if (isDragging && dragStart) {
-        dragCurrent = p;
-        renderMaskWithLabels();
+      // Hover float update
+      if (roiId !== hoveredRoiId) {
+        hoveredRoiId = roiId;
+        hoverScaleTarget = roiId > 0 ? hoverScaleMax : 1.0;
       }
+
+      // Box selection drag
+      if (interactionMode === "box" && isDragging && dragStart) {
+        dragCurrent = p;
+      }
+
+      renderOverlay();
     });
 
     maskCanvas.addEventListener("mouseleave", () => {
       if (!maskLoaded) return;
-      hoverInfo.textContent = "鼠标已离开 ROI 视图";
-      if (isDragging) {
+      hoverInfo.textContent = "Mouse left ROI view";
+      hoveredRoiId = 0;
+      hoverScaleTarget = 1.0;
+      if (isDragging && interactionMode === "box") {
         isDragging = false;
         dragStart = null;
         dragCurrent = null;
-        renderMaskWithLabels();
       }
+      renderOverlay();
     });
 
     maskCanvas.addEventListener("mousedown", e => {
-      if (e.button !== 0) return; // 只处理左键，右键用于平移
       if (!maskLoaded || !roiLabelData) return;
+      if (e.button !== 0) return;
       const p = canvasPixelFromEvent(e);
       if (!p) return;
 
       if (interactionMode === "click") {
-        if (!activeLabelId) {
-          alert("请先在右侧创建并选择一个标签。");
-          return;
-        }
         const roiId = getRoiIdAt(p.x, p.y);
         if (roiId === 0) {
-          updateSelectionStatus("点击在背景区域，没有 ROI。");
-          return;
+          updateSelectionStatus("Clicked background (no ROI).");
+        } else {
+          toggleOrAssignLabelForRoi(roiId);
+          renderBase();
+          renderOverlay();
+          const current = roiAssignments[roiId];
+          if (current) {
+            updateSelectionStatus(`ROI ${roiId} set to label ${current}.`);
+          } else {
+            updateSelectionStatus(`ROI ${roiId} label cleared.`);
+          }
         }
-        assignLabelToRoi(roiId, activeLabelId);
-        renderMaskWithLabels();
-        updateSelectionStatus(`ROI ${roiId} 已赋予标签 ${activeLabelId}`);
       } else if (interactionMode === "box") {
         isDragging = true;
         dragStart = p;
         dragCurrent = p;
+        renderOverlay();
       }
+      // Move mode drag is handled on canvasContainer
     });
 
     maskCanvas.addEventListener("mouseup", e => {
@@ -1079,49 +1276,41 @@
       if (!maskLoaded || !roiLabelData) return;
       if (interactionMode !== "box") return;
       if (!isDragging || !dragStart) return;
-
       const p = canvasPixelFromEvent(e);
       if (!p) {
         isDragging = false;
         dragStart = null;
         dragCurrent = null;
-        renderMaskWithLabels();
+        renderOverlay();
         return;
       }
       dragCurrent = p;
 
-      if (!activeLabelId) {
-        alert("请先在右侧创建并选择一个标签。");
-        isDragging = false;
-        dragStart = null;
-        dragCurrent = null;
-        renderMaskWithLabels();
-        return;
-      }
-
       const roiIds = getRoiIdsInRect(
         dragStart.x, dragStart.y, dragCurrent.x, dragCurrent.y
       );
-      roiIds.forEach(id => assignLabelToRoi(id, activeLabelId));
+      toggleOrAssignLabelForRoiBatch(roiIds);
 
       isDragging = false;
       dragStart = null;
       dragCurrent = null;
-      renderMaskWithLabels();
+
+      renderBase();
+      renderOverlay();
 
       if (roiIds.length) {
         updateSelectionStatus(
-          `框选区域中 ${roiIds.length} 个 ROI 已赋予标签 ${activeLabelId}`
+          `Box selection updated ${roiIds.length} ROIs according to current label logic.`
         );
       } else {
-        updateSelectionStatus("框选区域内没有 ROI。");
+        updateSelectionStatus("No ROI in box selection.");
       }
     });
 
-    // 导出 JSON
+    // Export JSON
     exportJsonBtn.addEventListener("click", () => {
       if (!maskLoaded || !roiLabelData) {
-        alert("请先加载模板并完成自动分割。");
+        alert("Please load a template image and run segmentation first.");
         return;
       }
       const obj = {
@@ -1145,10 +1334,10 @@
       URL.revokeObjectURL(url);
     });
 
-    // 导出 PNG
+    // Export PNG
     exportPngBtn.addEventListener("click", () => {
       if (!maskLoaded || !roiLabelData) {
-        alert("请先加载模板并完成自动分割。");
+        alert("Please load a template image and run segmentation first.");
         return;
       }
       maskCanvas.toBlob(blob => {
@@ -1163,17 +1352,33 @@
       }, "image/png", 1.0);
     });
 
-    // 窗口大小变化时重新计算 baseScale 并保持大致居中
+    // Window resize: keep centered
     window.addEventListener("resize", () => {
       if (!maskLoaded) return;
       computeBaseScale();
       updateViewTransform();
     });
 
-    // 初始化
-    setInteractionMode("click");
-    updateGlobalStats();
-    refreshLabelList();
+    // Hover animation loop
+    function hoverAnimLoop() {
+      const dt = 1 / 60;
+      const diff = hoverScaleTarget - hoverScaleCurrent;
+      hoverScaleCurrent += diff * Math.min(1, hoverAnimSpeed * dt);
+      if (Math.abs(diff) < 0.001) {
+        hoverScaleCurrent = hoverScaleTarget;
+      }
+      renderOverlay();
+      requestAnimationFrame(hoverAnimLoop);
+    }
+
+    // Init
+    (function init() {
+      setInteractionMode("click");
+      updateGlobalStats();
+      refreshLabelList();
+      labelColorInput.value = getNextColor();
+      hoverAnimLoop();
+    })();
   </script>
 </body>
 </html>
