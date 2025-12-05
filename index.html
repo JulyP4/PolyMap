@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Root ROI Map Annotator v6 (Unified Raster-to-Vector)</title>
+  <title>Root ROI Map Annotator v6</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
@@ -450,8 +450,7 @@
     let isPanning = false, panStartClientX = 0, panStartClientY = 0, panStartX = 0, panStartY = 0;
 
     let hoveredRoiId = 0;
-    let hoverScaleCurrent = 1.0, hoverScaleTarget = 1.0;
-    const hoverScaleMax = 1.06, hoverAnimSpeed = 8.0;
+    const hoverScaleFactor = 1.05;   // 固定上浮放大比例
 
     const idCanvas = document.createElement("canvas");
     const idCtx = idCanvas.getContext("2d", { willReadFrequently: true });
@@ -658,14 +657,18 @@
     }
 
     function renderBase(){
-      if (!maskLoaded || roiCount===0) return;
+      // 只检查 ROI 是否存在，不再依赖 maskLoaded（避免第一次载入是黑屏）
+      if (roiCount === 0) return;
+
       ctx.clearRect(0,0,imgWidth,imgHeight);
       ctx.save();
+      ctx.imageSmoothingEnabled = true;
       ctx.fillStyle="#020617";
       ctx.fillRect(0,0,imgWidth,imgHeight);
       ctx.restore();
 
       ctx.save();
+      ctx.imageSmoothingEnabled = true;
       ctx.lineJoin="round";
       ctx.lineCap="round";
       ctx.miterLimit=2;
@@ -688,7 +691,7 @@
         ctx.closePath();
         ctx.fillStyle=fillColor;
         ctx.strokeStyle="#000000";
-        ctx.lineWidth=1.2;
+        ctx.lineWidth=1.6;   // 统一的边界宽度
         ctx.fill();
         ctx.stroke();
       }
@@ -723,7 +726,7 @@
           const {r,g,b}=hexToRgb(baseColor);
           overlayCtx.save();
           overlayCtx.translate(cx,cy);
-          overlayCtx.scale(hoverScaleCurrent,hoverScaleCurrent);
+          overlayCtx.scale(hoverScaleFactor,hoverScaleFactor);
           overlayCtx.translate(-cx,-cy);
           overlayCtx.beginPath();
           overlayCtx.moveTo(poly[0][0],poly[0][1]);
@@ -765,9 +768,9 @@
       else delete roiAssignments[id];
     }
 
-    // === 核心：统一的高分辨率分割管线 ===
+    // === 统一的高分辨率分割管线 ===
     function segmentRasterToPolygons(img){
-      const maxDim = 3500;  // 提高一点分辨率，边缘更平滑
+      const maxDim = 3500;
       const scale = Math.min(maxDim/Math.max(img.width,img.height), 6);
       const segW = Math.round(img.width*scale);
       const segH = Math.round(img.height*scale);
@@ -867,7 +870,8 @@
           const tb=Math.atan2(b.y-cy,b.x-cx);
           return ta-tb;
         });
-        const step=Math.max(1,Math.floor(boundary.length/1200));
+        // 边界下采样：最多 ~800 个点，曲线更平滑、线宽更均匀
+        const step=Math.max(1,Math.floor(boundary.length/800));
         const poly=[];
         for (let i=0;i<boundary.length;i+=step){
           poly.push([boundary[i].x+0.5,boundary[i].y+0.5]);
@@ -878,13 +882,15 @@
 
       filterBackgroundPolygons();
       buildIdCanvas();
-      renderBase();
-      renderOverlay();
       maskLoaded=true;
       emptyState.style.display="none";
       hoverInfo.textContent=`Template segmented · ROIs: ${roiCount}`;
       setMaskInfo(`High-res segmentation ${segW}×${segH}, ROIs: ${roiCount} (background filtered).`);
       updateSelectionStatus("No ROI selected");
+
+      // 这时已经有 ROI，可以立即绘制，不再黑屏
+      renderBase();
+      renderOverlay();
     }
 
     // --- 文件载入：统一走 Image + segmentRasterToPolygons ---
@@ -925,12 +931,13 @@
           activeLabelId = labels.length? labels[0].id : null;
           resizeCanvases(imgWidth,imgHeight);
           buildIdCanvas();
-          renderBase(); renderOverlay();
           maskLoaded=true;
           emptyState.style.display="none";
           hoverInfo.textContent=`Project loaded · ROIs: ${roiCount}`;
           setMaskInfo("Project JSON loaded.");
           updateSelectionStatus("No ROI selected");
+          renderBase();
+          renderOverlay();
         }catch(err){
           console.error(err);
           alert("Failed to parse JSON.");
@@ -1052,7 +1059,6 @@
       }
       if (id!==hoveredRoiId){
         hoveredRoiId=id;
-        hoverScaleTarget = id>0 ? hoverScaleMax : 1.0;
       }
       if (interactionMode==="box" && isDragging && dragStart){
         dragCurrent=p;
@@ -1063,7 +1069,7 @@
     maskCanvas.addEventListener("mouseleave",()=>{
       if (!maskLoaded) return;
       hoverInfo.textContent="Mouse left ROI view";
-      hoveredRoiId=0; hoverScaleTarget=1.0;
+      hoveredRoiId=0;
       if (isDragging && interactionMode==="box"){
         isDragging=false; dragStart=null; dragCurrent=null;
       }
@@ -1113,21 +1119,11 @@
       computeBaseScale(); updateViewTransform();
     });
 
-    function hoverAnimLoop(){
-      const dt=1/60;
-      const diff=hoverScaleTarget-hoverScaleCurrent;
-      hoverScaleCurrent += diff*Math.min(1,hoverAnimSpeed*dt);
-      if (Math.abs(diff)<0.001) hoverScaleCurrent=hoverScaleTarget;
-      renderOverlay();
-      requestAnimationFrame(hoverAnimLoop);
-    }
-
     (function init(){
       setInteractionMode("click");
       updateGlobalStats();
       refreshLabelList();
       labelColorInput.value=getNextColor();
-      hoverAnimLoop();
     })();
   </script>
 </body>
