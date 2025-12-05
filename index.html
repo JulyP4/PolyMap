@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Root ROI Map Annotator v4 (Vector-style)</title>
+  <title>Root ROI Map Annotator v5 (Pure Vector)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
@@ -16,7 +16,6 @@
       --muted: #9ca3af;
       --danger: #f97373;
     }
-
     * { box-sizing: border-box; }
 
     body {
@@ -354,13 +353,23 @@
       justify-content: space-between;
       align-items: center;
     }
+
+    /* hidden offscreen SVG container for parsing */
+    #hiddenSvg {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+      pointer-events: none;
+      opacity: 0;
+    }
   </style>
 </head>
 <body>
   <header>
     <div>
-      <h1>Root ROI Map Annotator v4</h1>
-      <span>Template image → high-res segmentation → vector-style ROI map + labels → single-file JSON/PNG</span>
+      <h1>Root ROI Map Annotator v5</h1>
+      <span>Template image → vector ROS (SVG paths or segmented contours) → black-border ROI map + labels</span>
     </div>
     <div class="pill">
       <span>Click: label / clear</span>
@@ -379,11 +388,11 @@
       <div class="panel-body">
         <div class="section">
           <div class="section-title">1. Root template image</div>
-          <label for="maskFileInput">PNG / JPEG / SVG (black outlines + white background)</label>
+          <label for="maskFileInput">SVG (preferred) or PNG/JPEG (black outlines + white background)</label>
           <input type="file" id="maskFileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
           <div class="hint">
-            The image is only used once to extract ROI shapes (high-res).
-            Display uses rebuilt vector-style ROIs, not the original raster.
+            · If SVG: paths are used directly as vector ROIs (smooth, resolution-independent).<br/>
+            · If PNG/JPEG: we segment, then convert boundaries to polygons (approximate vector).
           </div>
           <div id="maskInfo" class="status-line"></div>
         </div>
@@ -397,8 +406,8 @@
           <label for="annotationFileInput">Import project JSON</label>
           <input type="file" id="annotationFileInput" accept="application/json,.json" />
           <div class="hint">
-            JSON stores: high-res ROI map, vector polygons, centroids, labels, and assignments.
-            You can reload it later without the original image.
+            JSON stores: vector polygons, centroids, labels, and assignments.
+            No raster label map is needed; map is fully reconstructable.
           </div>
         </div>
 
@@ -418,9 +427,9 @@
     <section class="panel">
       <div class="panel-header">
         <div>
-          <div class="panel-title">Vector-style ROI Map View</div>
+          <div class="panel-title">Vector ROI Map View</div>
           <div class="panel-subtitle">
-            Each ROI is redrawn as a smooth vector-style region with its own border. Interiors are kept blank (light).
+            Each ROI is an independent vector-like shape: pure white interior, fixed-width black border, smooth outline.
           </div>
         </div>
         <div id="hoverInfo" class="pill">No image loaded</div>
@@ -429,11 +438,10 @@
         <canvas id="maskCanvas"></canvas>
         <canvas id="overlayCanvas"></canvas>
         <div id="emptyState" class="empty-state">
-          Upload a root template image (black outlines + white background).<br /><br />
-          The image is upscaled for segmentation, then converted into:<br />
-          · High-res ROI ID map<br />
-          · Vector-like polygons for each closed region<br />
-          Only closed white regions become ROIs; open lines are ignored as boundaries.
+          Upload a root template image (SVG recommended).<br/><br/>
+          · SVG: closed paths become ROIs directly. <br/>
+          · Raster: white regions are segmented, then boundaries are vectorized into polygons.<br/>
+          Only closed regions become ROIs; open strokes remain as boundaries.
         </div>
       </div>
     </section>
@@ -449,13 +457,13 @@
           <div class="section-title">1. Create label</div>
           <label for="labelNameInput">Label name</label>
           <input type="text" id="labelNameInput" placeholder="e.g. Meristem / Cortex / QC" />
-          <label for="labelColorInput">Label color (border)</label>
+          <label for="labelColorInput">Label color (fill tint)</label>
           <input type="color" id="labelColorInput" />
           <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">Add label</button>
           <div class="hint">
-            Click a label to set it as active (click again to deactivate).<br/>
-            · With an active label: click/box → set/overwrite that label on selected ROIs.<br/>
-            · With no active label: click/box → clear labels on selected ROIs.
+            Click a label to toggle it as active.<br/>
+            · Active label: click/box → set/overwrite that label on selected ROIs (white interior tinted with label color).<br/>
+            · No active label: click/box → clear labels on selected ROIs (pure white interior).
           </div>
         </div>
 
@@ -476,18 +484,22 @@
   </main>
 
   <footer>
-    <div>Largest white connected region is treated as outside background and removed.</div>
+    <div>Largest outer region is treated as outside background (ignored).</div>
     <div id="selectionStatus">No ROI selected</div>
   </footer>
 
+  <!-- hidden SVG container used only for measuring paths -->
+  <div id="hiddenSvg"></div>
+
   <script>
-    // ===== DOM references =====
+    // ===== DOM refs =====
     const maskCanvas = document.getElementById("maskCanvas");
     const overlayCanvas = document.getElementById("overlayCanvas");
     const ctx = maskCanvas.getContext("2d");
     const overlayCtx = overlayCanvas.getContext("2d");
     const canvasContainer = document.getElementById("canvasContainer");
     const emptyState = document.getElementById("emptyState");
+    const hiddenSvgContainer = document.getElementById("hiddenSvg");
 
     const maskFileInput = document.getElementById("maskFileInput");
     const annotationFileInput = document.getElementById("annotationFileInput");
@@ -516,17 +528,13 @@
     let imgHeight = 0;
     let maskLoaded = false;
 
-    // ROI ID per pixel in high-res grid
-    let roiLabelData = null; // Uint16Array
+    // ROI shapes
+    let roiPolygons = {};   // roiId -> [[x,y], ...]
+    let roiCentroids = {};  // roiId -> {cx, cy}
     let roiCount = 0;
 
-    // ROI → pixels, polygons, centroids
-    let roiPixelMap = {};    // roiId -> { pixels: [{x,y}], cx, cy }
-    let roiPolygons = {};    // roiId -> [[x,y], ...]
-    let roiCentroids = {};   // roiId -> {cx, cy}
-
     // Labels
-    let labels = [];         // {id, name, color}
+    let labels = [];        // {id, name, color}
     let activeLabelId = null;
     let roiAssignments = {}; // roiId -> labelId
 
@@ -536,8 +544,8 @@
     ];
     let colorIndex = 0;
 
-    // Interaction
-    let interactionMode = "click"; // "click" | "box" | "move"
+    // Modes
+    let interactionMode = "click";
     let isDragging = false;
     let dragStart = null;
     let dragCurrent = null;
@@ -563,6 +571,10 @@
     const hoverScaleMax = 1.06;
     const hoverAnimSpeed = 8.0;
 
+    // Hidden ID canvas for hit-testing (each ROI in a unique color)
+    const idCanvas = document.createElement("canvas");
+    const idCtx = idCanvas.getContext("2d", { willReadFrequently: true });
+
     // ===== Utilities =====
     function hexToRgb(hex) {
       hex = hex.replace("#", "");
@@ -578,9 +590,21 @@
     }
 
     function getNextColor() {
-      const color = defaultColors[colorIndex % defaultColors.length];
+      const c = defaultColors[colorIndex % defaultColors.length];
       colorIndex++;
-      return color;
+      return c;
+    }
+
+    function encodeIdToColor(id) {
+      const r = id & 0xff;
+      const g = (id >> 8) & 0xff;
+      const b = (id >> 16) & 0xff;
+      return `rgb(${r},${g},${b})`;
+    }
+
+    function decodeColorToId(r, g, b) {
+      const id = r + (g << 8) + (b << 16);
+      return id;
     }
 
     function setMaskInfo(text) {
@@ -592,26 +616,21 @@
       modeClickBtn.classList.toggle("primary", mode === "click");
       modeBoxBtn.classList.toggle("primary", mode === "box");
       modeMoveBtn.classList.toggle("primary", mode === "move");
-
       if (mode === "click") {
-        modeStatus.innerHTML = "Mode: <strong>Click</strong>. With active label: set/overwrite. Without label: clear.";
+        modeStatus.innerHTML = "Mode: <strong>Click</strong>. Active label → set/overwrite. No label → clear.";
       } else if (mode === "box") {
-        modeStatus.innerHTML = "Mode: <strong>Box</strong>. Drag to apply the same logic to multiple ROIs.";
+        modeStatus.innerHTML = "Mode: <strong>Box</strong>. Drag rectangle to apply the same logic to many ROIs.";
       } else {
-        modeStatus.innerHTML = "Mode: <strong>Move</strong>. Drag to pan, wheel to zoom at mouse.";
+        modeStatus.innerHTML = "Mode: <strong>Move</strong>. Drag canvas, wheel zoom at mouse.";
       }
     }
 
     function updateGlobalStats() {
-      if (!maskLoaded || !roiLabelData) {
+      if (!maskLoaded || roiCount === 0) {
         globalStats.textContent = "No image/project loaded yet.";
         return;
       }
-      const used = new Set();
-      for (let i = 0; i < roiLabelData.length; i++) {
-        if (roiLabelData[i] > 0) used.add(roiLabelData[i]);
-      }
-      const total = used.size;
+      const total = roiCount;
       const labeledSet = new Set(
         Object.keys(roiAssignments)
           .filter(k => roiAssignments[k])
@@ -632,6 +651,8 @@
       maskCanvas.height = height;
       overlayCanvas.width = width;
       overlayCanvas.height = height;
+      idCanvas.width = width;
+      idCanvas.height = height;
 
       maskCanvas.style.width = width + "px";
       maskCanvas.style.height = height + "px";
@@ -654,15 +675,11 @@
     function updateViewTransform() {
       if (!imgWidth || !imgHeight) return;
       if (!baseScale) computeBaseScale();
-
       const rect = canvasContainer.getBoundingClientRect();
       const scale = baseScale * viewScale;
-
       const tx = (rect.width - imgWidth * scale) / 2 + panX;
       const ty = (rect.height - imgHeight * scale) / 2 + panY;
-
       const transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
-
       maskCanvas.style.transformOrigin = "top left";
       overlayCanvas.style.transformOrigin = "top left";
       maskCanvas.style.transform = transform;
@@ -686,21 +703,18 @@
       labels.forEach(label => {
         const item = document.createElement("div");
         item.className = "label-item" + (label.id === activeLabelId ? " active" : "");
-        item.dataset.labelId = label.id;
-
         const colorDot = document.createElement("div");
         colorDot.className = "label-color-dot";
         colorDot.style.backgroundColor = label.color;
 
         const main = document.createElement("div");
         main.className = "label-main";
-        const nameDiv = document.createElement("div");
-        nameDiv.textContent = label.name || "(Untitled)";
-        const metaDiv = document.createElement("div");
-        metaDiv.textContent = `ID: ${label.id} · ROIs: ${counts[label.id] || 0}`;
-
-        main.appendChild(nameDiv);
-        main.appendChild(metaDiv);
+        const nDiv = document.createElement("div");
+        nDiv.textContent = label.name || "(Untitled)";
+        const mDiv = document.createElement("div");
+        mDiv.textContent = `ID: ${label.id} · ROIs: ${counts[label.id] || 0}`;
+        main.appendChild(nDiv);
+        main.appendChild(mDiv);
 
         const rightBox = document.createElement("div");
         rightBox.style.display = "flex";
@@ -744,8 +758,8 @@
     function deleteLabel(labelId) {
       labels = labels.filter(l => l.id !== labelId);
       if (activeLabelId === labelId) activeLabelId = null;
-      for (const [roiId, lid] of Object.entries(roiAssignments)) {
-        if (lid === labelId) delete roiAssignments[roiId];
+      for (const [roiId, lId] of Object.entries(roiAssignments)) {
+        if (lId === labelId) delete roiAssignments[roiId];
       }
       refreshLabelList();
       updateGlobalStats();
@@ -762,214 +776,57 @@
       labelColorInput.value = getNextColor();
     }
 
-    // ----- Base64 encode/decode for Uint16 ROI map -----
-    function encodeUint16ToBase64(arr) {
-      const bytes = new Uint8Array(arr.length * 2);
-      const dv = new DataView(bytes.buffer);
-      for (let i = 0; i < arr.length; i++) {
-        dv.setUint16(i * 2, arr[i], true);
-      }
-      let bin = "";
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      return btoa(bin);
-    }
+    // ===== Hit-test using ID canvas =====
+    function buildIdCanvas() {
+      idCanvas.width = imgWidth;
+      idCanvas.height = imgHeight;
+      idCtx.clearRect(0, 0, imgWidth, imgHeight);
+      idCtx.imageSmoothingEnabled = false;
 
-    function decodeUint16FromBase64(b64) {
-      const bin = atob(b64);
-      const len = bin.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
-      const dv = new DataView(bytes.buffer);
-      const arr = new Uint16Array(len / 2);
-      for (let i = 0; i < arr.length; i++) {
-        arr[i] = dv.getUint16(i * 2, true);
-      }
-      return arr;
-    }
-
-    // ===== High-res segmentation =====
-    function segmentImageHighRes(img) {
-      // Choose high-res grid
-      const maxDim = 2000;
-      const scaleCandidate = maxDim / Math.max(img.width, img.height);
-      const segScale = Math.min(4, Math.max(1, scaleCandidate)); // 1–4x
-      const segW = Math.round(img.width * segScale);
-      const segH = Math.round(img.height * segScale);
-
-      // Hidden canvas for segmentation
-      const segCanvas = document.createElement("canvas");
-      segCanvas.width = segW;
-      segCanvas.height = segH;
-      const segCtx = segCanvas.getContext("2d");
-      segCtx.imageSmoothingEnabled = true;
-      segCtx.setTransform(segScale, 0, 0, segScale, 0, 0);
-      segCtx.drawImage(img, 0, 0);
-
-      imgWidth = segW;
-      imgHeight = segH;
-      resizeCanvases(imgWidth, imgHeight);
-
-      const imageData = segCtx.getImageData(0, 0, segW, segH);
-      const data = imageData.data;
-      const pixels = segW * segH;
-
-      const labelsArr = new Int32Array(pixels);
-      const isBoundary = new Uint8Array(pixels);
-
-      // Dark pixels = boundary
-      for (let i = 0; i < pixels; i++) {
-        const r = data[i * 4];
-        const g = data[i * 4 + 1];
-        const b = data[i * 4 + 2];
-        const a = data[i * 4 + 3];
-        const brightness = (r + g + b) / 3;
-        if (a > 0 && brightness < 220) {
-          isBoundary[i] = 1;
+      for (let id = 1; id <= roiCount; id++) {
+        const poly = roiPolygons[id];
+        if (!poly || poly.length < 3) continue;
+        idCtx.beginPath();
+        idCtx.moveTo(poly[0][0], poly[0][1]);
+        for (let i = 1; i < poly.length; i++) {
+          idCtx.lineTo(poly[i][0], poly[i][1]);
         }
-      }
-
-      let currentLabel = 0;
-      const stack = [];
-
-      function pushIfValid(idx) {
-        if (idx < 0 || idx >= pixels) return;
-        if (isBoundary[idx]) return;
-        if (labelsArr[idx] !== 0) return;
-        labelsArr[idx] = currentLabel;
-        stack.push(idx);
-      }
-
-      for (let i = 0; i < pixels; i++) {
-        if (isBoundary[i]) continue;
-        if (labelsArr[i] !== 0) continue;
-        currentLabel++;
-        labelsArr[i] = currentLabel;
-        stack.length = 0;
-        stack.push(i);
-        while (stack.length > 0) {
-          const idx = stack.pop();
-          const x = idx % segW;
-          const y = (idx / segW) | 0;
-          if (x > 0) pushIfValid(idx - 1);
-          if (x < segW - 1) pushIfValid(idx + 1);
-          if (y > 0) pushIfValid(idx - segW);
-          if (y < segH - 1) pushIfValid(idx + segW);
-        }
-      }
-
-      const areas = new Array(currentLabel + 1).fill(0);
-      for (let i = 0; i < pixels; i++) {
-        const l = labelsArr[i];
-        if (l > 0) areas[l]++;
-      }
-
-      let largestLabel = 0;
-      let largestArea = 0;
-      for (let l = 1; l <= currentLabel; l++) {
-        if (areas[l] > largestArea) {
-          largestArea = areas[l];
-          largestLabel = l;
-        }
-      }
-
-      const labelMap = new Int32Array(currentLabel + 1);
-      let newId = 1;
-      for (let l = 1; l <= currentLabel; l++) {
-        if (l === largestLabel) labelMap[l] = 0;
-        else labelMap[l] = newId++;
-      }
-
-      roiLabelData = new Uint16Array(pixels);
-      roiCount = newId - 1;
-      roiPixelMap = {};
-      roiPolygons = {};
-      roiCentroids = {};
-
-      for (let i = 0; i < pixels; i++) {
-        const old = labelsArr[i];
-        const newVal = labelMap[old];
-        roiLabelData[i] = newVal;
-        if (newVal > 0) {
-          const x = i % segW;
-          const y = (i / segW) | 0;
-          if (!roiPixelMap[newVal]) {
-            roiPixelMap[newVal] = { pixels: [], cx: 0, cy: 0 };
-          }
-          roiPixelMap[newVal].pixels.push({ x, y });
-        }
-      }
-
-      // Centroids
-      for (const [idStr, obj] of Object.entries(roiPixelMap)) {
-        const arr = obj.pixels;
-        let sx = 0, sy = 0;
-        for (const p of arr) { sx += p.x; sy += p.y; }
-        const n = arr.length || 1;
-        const cx = sx / n;
-        const cy = sy / n;
-        obj.cx = cx;
-        obj.cy = cy;
-        roiCentroids[idStr] = { cx, cy };
-      }
-
-      // Polygons
-      buildRoiPolygonsFromPixels(segW, segH);
-
-      setMaskInfo(`Segmentation: high-res grid ${segW} × ${segH}, ROIs: ${roiCount} (outer background removed).`);
-      updateGlobalStats();
-
-      // clear visible canvas; we will draw vector-style
-      ctx.clearRect(0, 0, imgWidth, imgHeight);
-    }
-
-    function buildRoiPolygonsFromPixels(width, height) {
-      roiPolygons = {};
-      for (const [idStr, obj] of Object.entries(roiPixelMap)) {
-        const pixels = obj.pixels;
-        if (!pixels || !pixels.length) continue;
-        const pixelSet = new Set(pixels.map(p => p.x + "," + p.y));
-        const boundary = [];
-        for (const p of pixels) {
-          const neighbors = [
-            (p.x - 1) + "," + p.y,
-            (p.x + 1) + "," + p.y,
-            p.x + "," + (p.y - 1),
-            p.x + "," + (p.y + 1)
-          ];
-          let isBoundaryPix = false;
-          for (const nb of neighbors) {
-            if (!pixelSet.has(nb)) {
-              isBoundaryPix = true;
-              break;
-            }
-          }
-          if (isBoundaryPix) boundary.push({ x: p.x, y: p.y });
-        }
-        if (!boundary.length) continue;
-
-        const { cx, cy } = roiCentroids[idStr];
-        boundary.sort((a, b) => {
-          const ta = Math.atan2(a.y - cy, a.x - cx);
-          const tb = Math.atan2(b.y - cy, b.x - cx);
-          return ta - tb;
-        });
-
-        const step = Math.max(1, Math.floor(boundary.length / 1200));
-        const poly = [];
-        for (let i = 0; i < boundary.length; i += step) {
-          poly.push([boundary[i].x + 0.5, boundary[i].y + 0.5]);
-        }
-        roiPolygons[idStr] = poly;
+        idCtx.closePath();
+        idCtx.fillStyle = encodeIdToColor(id);
+        idCtx.fill();
       }
     }
 
-    // ===== Base render: blank interior + colored borders =====
+    function getRoiIdAt(x, y) {
+      if (!roiCount) return 0;
+      const pixel = idCtx.getImageData(x, y, 1, 1).data;
+      const r = pixel[0], g = pixel[1], b = pixel[2];
+      const id = decodeColorToId(r, g, b);
+      if (id < 0 || id > roiCount) return 0;
+      return id;
+    }
+
+    function getRoiIdsInRect(x1, y1, x2, y2) {
+      const minX = Math.max(0, Math.min(x1, x2));
+      const maxX = Math.min(imgWidth - 1, Math.max(x1, x2));
+      const minY = Math.max(0, Math.min(y1, y2));
+      const maxY = Math.min(imgHeight - 1, Math.max(y1, y2));
+      const w = maxX - minX + 1;
+      const h = maxY - minY + 1;
+      const imgData = idCtx.getImageData(minX, minY, w, h).data;
+      const set = new Set();
+      for (let i = 0; i < imgData.length; i += 4) {
+        const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
+        const id = decodeColorToId(r, g, b);
+        if (id > 0 && id <= roiCount) set.add(id);
+      }
+      return Array.from(set);
+    }
+
+    // ===== Base render: white interior + black border, label color = tint =====
     function renderBase() {
-      if (!maskLoaded || !roiLabelData) return;
-
+      if (!maskLoaded || roiCount === 0) return;
       ctx.clearRect(0, 0, imgWidth, imgHeight);
-
-      // Background outside ROIs
       ctx.save();
       ctx.fillStyle = "#020617";
       ctx.fillRect(0, 0, imgWidth, imgHeight);
@@ -985,15 +842,15 @@
         if (!poly || poly.length < 3) continue;
 
         const labelId = roiAssignments[id];
-        let borderColor;
+        let fillColor = "#ffffff"; // pure white interior by default
         if (labelId) {
           const label = labels.find(l => l.id === labelId);
-          borderColor = label ? label.color : "#6366f1";
-        } else {
-          borderColor = "#9ca3af";
+          if (label) {
+            const { r, g, b } = hexToRgb(label.color);
+            fillColor = `rgba(${r},${g},${b},0.35)`; // tinted but not grey
+          }
         }
 
-        // interior light/blank
         ctx.beginPath();
         ctx.moveTo(poly[0][0], poly[0][1]);
         for (let i = 1; i < poly.length; i++) {
@@ -1001,9 +858,9 @@
         }
         ctx.closePath();
 
-        ctx.fillStyle = "#f9fafb"; // blank interior (light)
-        ctx.strokeStyle = borderColor;
-        ctx.lineWidth = 1.1;
+        ctx.fillStyle = fillColor;
+        ctx.strokeStyle = "#000000";
+        ctx.lineWidth = 1.2;
 
         ctx.fill();
         ctx.stroke();
@@ -1014,29 +871,25 @@
       refreshLabelList();
     }
 
-    // ===== Overlay: box selection + hover float =====
+    // ===== Overlay: box selection + hover float（沿用你之前的逻辑） =====
     function renderOverlay() {
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-      // box selection
       if (isDragging && dragStart && dragCurrent && interactionMode === "box") {
         overlayCtx.save();
         overlayCtx.setLineDash([4, 3]);
         overlayCtx.lineWidth = 1.5;
         overlayCtx.strokeStyle = "rgba(96,165,250,0.9)";
         overlayCtx.fillStyle = "rgba(37,99,235,0.18)";
-
         const x = Math.min(dragStart.x, dragCurrent.x);
         const y = Math.min(dragStart.y, dragCurrent.y);
         const w = Math.abs(dragCurrent.x - dragStart.x);
         const h = Math.abs(dragCurrent.y - dragStart.y);
-
         overlayCtx.fillRect(x, y, w, h);
         overlayCtx.strokeRect(x, y, w, h);
         overlayCtx.restore();
       }
 
-      // hover float
       if (hoveredRoiId > 0 && roiPolygons[hoveredRoiId]) {
         const poly = roiPolygons[hoveredRoiId];
         const center = roiCentroids[hoveredRoiId];
@@ -1063,14 +916,12 @@
           overlayCtx.shadowColor = "rgba(15,23,42,0.9)";
           overlayCtx.shadowBlur = 12;
           overlayCtx.shadowOffsetY = 4;
-
-          overlayCtx.fillStyle = `rgba(${Math.min(r+30,255)},${Math.min(g+30,255)},${Math.min(b+30,255)},0.92)`;
+          overlayCtx.fillStyle = `rgba(${Math.min(r+30,255)},${Math.min(g+30,255)},${Math.min(b+30,255)},0.9)`;
           overlayCtx.strokeStyle = "rgba(248,250,252,0.95)";
           overlayCtx.lineWidth = 1.6;
 
           overlayCtx.fill();
           overlayCtx.stroke();
-
           overlayCtx.restore();
         }
       }
@@ -1087,75 +938,333 @@
       return { x, y };
     }
 
-    function getRoiIdAt(x, y) {
-      if (!roiLabelData) return 0;
-      const idx = y * imgWidth + x;
-      if (idx < 0 || idx >= roiLabelData.length) return 0;
-      return roiLabelData[idx];
-    }
-
+    // ===== Apply label logic =====
     function applyLabelToRois(roiIds) {
-      roiIds.forEach(roiId => {
-        if (roiId <= 0) return;
+      roiIds.forEach(id => {
+        if (id <= 0) return;
         if (activeLabelId) {
-          roiAssignments[roiId] = activeLabelId;
+          roiAssignments[id] = activeLabelId;
         } else {
-          delete roiAssignments[roiId];
+          delete roiAssignments[id];
         }
       });
     }
 
-    function applyLabelToSingleRoi(roiId) {
-      if (roiId <= 0) return;
+    function applyLabelToSingleRoi(id) {
+      if (id <= 0) return;
       if (activeLabelId) {
-        roiAssignments[roiId] = activeLabelId;
+        roiAssignments[id] = activeLabelId;
       } else {
-        delete roiAssignments[roiId];
+        delete roiAssignments[id];
       }
     }
 
-    function getRoiIdsInRect(x1, y1, x2, y2) {
-      const minX = Math.max(0, Math.min(x1, x2));
-      const maxX = Math.min(imgWidth - 1, Math.max(x1, x2));
-      const minY = Math.max(0, Math.min(y1, y2));
-      const maxY = Math.min(imgHeight - 1, Math.max(y1, y2));
-      const set = new Set();
-      for (let y = minY; y <= maxY; y++) {
-        const rowOffset = y * imgWidth;
-        for (let x = minX; x <= maxX; x++) {
-          const roiId = roiLabelData[rowOffset + x];
-          if (roiId > 0) set.add(roiId);
+    // ===== SVG vector pipeline =====
+    function loadSvgAsVectorPolygons(svgText) {
+      hiddenSvgContainer.innerHTML = "";
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgText, "image/svg+xml");
+      const svgElem = doc.documentElement;
+
+      // Put into DOM so we can use getTotalLength/getPointAtLength
+      const imported = document.importNode(svgElem, true);
+      hiddenSvgContainer.appendChild(imported);
+
+      // viewBox or width/height
+      let vb = imported.getAttribute("viewBox");
+      if (vb) {
+        const parts = vb.split(/\s+/).map(Number);
+        imgWidth = parts[2];
+        imgHeight = parts[3];
+      } else {
+        imgWidth = parseFloat(imported.getAttribute("width")) || 1000;
+        imgHeight = parseFloat(imported.getAttribute("height")) || 1000;
+      }
+      resizeCanvases(imgWidth, imgHeight);
+
+      roiPolygons = {};
+      roiCentroids = {};
+      roiCount = 0;
+
+      const paths = imported.querySelectorAll("path, polygon, rect");
+      paths.forEach((el) => {
+        let poly = [];
+        if (el.tagName.toLowerCase() === "path") {
+          const pathElem = el;
+          try {
+            const length = pathElem.getTotalLength();
+            const sampleCount = Math.max(200, Math.floor(length / 2));
+            for (let i = 0; i <= sampleCount; i++) {
+              const pt = pathElem.getPointAtLength((length * i) / sampleCount);
+              poly.push([pt.x, pt.y]);
+            }
+          } catch (err) {
+            // skip problematic paths
+          }
+        } else if (el.tagName.toLowerCase() === "polygon") {
+          const pointsAttr = el.getAttribute("points") || "";
+          const pts = pointsAttr.trim().split(/[\s,]+/).map(Number);
+          for (let i = 0; i + 1 < pts.length; i += 2) {
+            poly.push([pts[i], pts[i+1]]);
+          }
+        } else if (el.tagName.toLowerCase() === "rect") {
+          const x = parseFloat(el.getAttribute("x") || "0");
+          const y = parseFloat(el.getAttribute("y") || "0");
+          const w = parseFloat(el.getAttribute("width") || "0");
+          const h = parseFloat(el.getAttribute("height") || "0");
+          poly = [
+            [x, y],
+            [x + w, y],
+            [x + w, y + h],
+            [x, y + h],
+          ];
+        }
+        if (poly.length < 3) return;
+
+        // 计算质心
+        let sx = 0, sy = 0;
+        poly.forEach(p => { sx += p[0]; sy += p[1]; });
+        const cx = sx / poly.length;
+        const cy = sy / poly.length;
+
+        roiCount++;
+        roiPolygons[roiCount] = poly;
+        roiCentroids[roiCount] = { cx, cy };
+      });
+
+      // 去掉最大的外层区域（如果有）
+      removeLargestOuterRegion();
+
+      buildIdCanvas();
+      renderBase();
+      renderOverlay();
+      maskLoaded = true;
+      emptyState.style.display = "none";
+      hoverInfo.textContent = `SVG loaded · ROIs: ${roiCount}`;
+      setMaskInfo(`SVG parsed as vector ROIs: ${roiCount}`);
+      updateSelectionStatus("No ROI selected");
+    }
+
+    function removeLargestOuterRegion() {
+      // 简单地把面积最大那个 ROI 当背景删掉
+      if (!roiCount) return;
+      let maxId = 0;
+      let maxArea = 0;
+      const areas = {};
+      for (let id = 1; id <= roiCount; id++) {
+        const poly = roiPolygons[id];
+        if (!poly) continue;
+        let area = 0;
+        for (let i = 0; i < poly.length; i++) {
+          const [x1, y1] = poly[i];
+          const [x2, y2] = poly[(i+1) % poly.length];
+          area += x1 * y2 - x2 * y1;
+        }
+        area = Math.abs(area / 2);
+        areas[id] = area;
+        if (area > maxArea) {
+          maxArea = area;
+          maxId = id;
         }
       }
-      return Array.from(set);
+      if (maxId > 0) {
+        delete roiPolygons[maxId];
+        delete roiCentroids[maxId];
+        // 重新压紧 ID（简单做法）
+        const newPolys = {};
+        const newCents = {};
+        let newId = 1;
+        Object.keys(roiPolygons).sort((a,b)=>a-b).forEach(k => {
+          const oldId = parseInt(k,10);
+          newPolys[newId] = roiPolygons[oldId];
+          newCents[newId] = roiCentroids[oldId];
+          newId++;
+        });
+        roiPolygons = newPolys;
+        roiCentroids = newCents;
+        roiCount = newId - 1;
+      }
     }
 
-    // ===== Load image & segment =====
+    // ===== Raster segmentation → vector polygons（与你之前逻辑类似，但只保留多边形） =====
+    function segmentRasterToPolygons(img) {
+      const maxDim = 2000;
+      const scale = Math.min(maxDim / Math.max(img.width, img.height), 4);
+      const segW = Math.round(img.width * scale);
+      const segH = Math.round(img.height * scale);
+
+      const segCanvas = document.createElement("canvas");
+      segCanvas.width = segW;
+      segCanvas.height = segH;
+      const segCtx = segCanvas.getContext("2d");
+      segCtx.imageSmoothingEnabled = true;
+      segCtx.setTransform(scale, 0, 0, scale, 0, 0);
+      segCtx.drawImage(img, 0, 0);
+
+      imgWidth = segW;
+      imgHeight = segH;
+      resizeCanvases(imgWidth, imgHeight);
+
+      const imageData = segCtx.getImageData(0, 0, segW, segH);
+      const data = imageData.data;
+      const pixels = segW * segH;
+
+      const labelsArr = new Int32Array(pixels);
+      const isBoundary = new Uint8Array(pixels);
+
+      for (let i = 0; i < pixels; i++) {
+        const r = data[i*4];
+        const g = data[i*4+1];
+        const b = data[i*4+2];
+        const a = data[i*4+3];
+        const bright = (r+g+b)/3;
+        if (a>0 && bright<220) isBoundary[i] = 1;
+      }
+
+      let currentLabel = 0;
+      const stack = [];
+      function pushIfValid(idx) {
+        if (idx<0 || idx>=pixels) return;
+        if (isBoundary[idx]) return;
+        if (labelsArr[idx] !== 0) return;
+        labelsArr[idx] = currentLabel;
+        stack.push(idx);
+      }
+
+      for (let i = 0; i < pixels; i++) {
+        if (isBoundary[i]) continue;
+        if (labelsArr[i] !== 0) continue;
+        currentLabel++;
+        labelsArr[i] = currentLabel;
+        stack.length = 0;
+        stack.push(i);
+        while (stack.length>0) {
+          const idx = stack.pop();
+          const x = idx % segW;
+          const y = (idx / segW) | 0;
+          if (x>0) pushIfValid(idx-1);
+          if (x<segW-1) pushIfValid(idx+1);
+          if (y>0) pushIfValid(idx-segW);
+          if (y<segH-1) pushIfValid(idx+segW);
+        }
+      }
+
+      const areas = new Array(currentLabel+1).fill(0);
+      for (let i=0;i<pixels;i++){
+        const l = labelsArr[i];
+        if (l>0) areas[l]++;
+      }
+      let largestLabel = 0;
+      let largestArea = 0;
+      for (let l=1;l<=currentLabel;l++){
+        if (areas[l]>largestArea){
+          largestArea = areas[l];
+          largestLabel = l;
+        }
+      }
+
+      const labelMap = new Int32Array(currentLabel+1);
+      let newId = 1;
+      for (let l=1;l<=currentLabel;l++){
+        if (l===largestLabel) labelMap[l]=0;
+        else labelMap[l]=newId++;
+      }
+
+      const roiPixelMap = {};
+      for (let i=0;i<pixels;i++){
+        const old = labelsArr[i];
+        const newVal = labelMap[old];
+        if (newVal>0){
+          const x = i%segW;
+          const y = (i/segW)|0;
+          if (!roiPixelMap[newVal]) roiPixelMap[newVal] = [];
+          roiPixelMap[newVal].push({x,y});
+        }
+      }
+
+      // build polygons + centroids
+      roiPolygons = {};
+      roiCentroids = {};
+      roiCount = newId-1;
+
+      for (let id=1; id<=roiCount; id++){
+        const pix = roiPixelMap[id] || [];
+        if (!pix.length) continue;
+        const pixelSet = new Set(pix.map(p => p.x + "," + p.y));
+        const boundary = [];
+        for (const p of pix){
+          const neighbors = [
+            (p.x-1)+","+p.y,
+            (p.x+1)+","+p.y,
+            p.x+","+(p.y-1),
+            p.x+","+(p.y+1)
+          ];
+          let isB = false;
+          for (const nb of neighbors){
+            if (!pixelSet.has(nb)){
+              isB = true;
+              break;
+            }
+          }
+          if (isB) boundary.push(p);
+        }
+        if (!boundary.length) continue;
+
+        let sx=0, sy=0;
+        boundary.forEach(p=>{sx+=p.x; sy+=p.y;});
+        const cx = sx / boundary.length;
+        const cy = sy / boundary.length;
+
+        boundary.sort((a,b)=>{
+          const ta = Math.atan2(a.y-cy, a.x-cx);
+          const tb = Math.atan2(b.y-cy, b.x-cx);
+          return ta-tb;
+        });
+
+        const step = Math.max(1, Math.floor(boundary.length/1200));
+        const poly=[];
+        for (let i=0;i<boundary.length;i+=step){
+          poly.push([boundary[i].x+0.5, boundary[i].y+0.5]);
+        }
+        roiPolygons[id] = poly;
+        roiCentroids[id] = {cx,cy};
+      }
+
+      setMaskInfo(`Raster segmentation (high-res ${segW}×${segH}), ROIs: ${roiCount} (outer background removed).`);
+      buildIdCanvas();
+      renderBase();
+      renderOverlay();
+      maskLoaded = true;
+      emptyState.style.display = "none";
+      hoverInfo.textContent = `Raster segmented · ROIs: ${roiCount}`;
+      updateSelectionStatus("No ROI selected");
+    }
+
+    // ===== Load image entry point =====
     maskFileInput.addEventListener("change", e => {
       const file = e.target.files[0];
       if (!file) return;
-
-      const img = new Image();
-      img.onload = () => {
-        emptyState.style.display = "none";
-        maskLoaded = true;
-
-        segmentImageHighRes(img);
-        roiAssignments = {};
-        renderBase();
-        renderOverlay();
-        hoverInfo.textContent = `High-res grid: ${imgWidth} × ${imgHeight} · ROIs: ${roiCount}`;
-        updateSelectionStatus("No ROI selected");
-      };
-      img.onerror = () => {
-        alert("Failed to load image. Please use a black-outline + white-background PNG/JPEG/SVG.");
-      };
-
-      const url = URL.createObjectURL(file);
-      img.src = url;
+      const isSvg = file.name.toLowerCase().endsWith(".svg") || file.type.includes("svg");
+      if (isSvg) {
+        const reader = new FileReader();
+        reader.onload = evt => {
+          loadSvgAsVectorPolygons(evt.target.result);
+        };
+        reader.readAsText(file);
+      } else {
+        const img = new Image();
+        img.onload = () => {
+          segmentRasterToPolygons(img);
+        };
+        img.onerror = () => {
+          alert("Failed to load raster image. Please use black-outline + white-background PNG/JPEG, or SVG.");
+        };
+        const url = URL.createObjectURL(file);
+        img.src = url;
+      }
     });
 
-    // ===== Import project JSON =====
+    // ===== Import / Export JSON（只存多边形和标签） =====
     annotationFileInput.addEventListener("change", e => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1163,63 +1272,81 @@
       reader.onload = evt => {
         try {
           const json = JSON.parse(evt.target.result);
-          if (!json.roiLabelData) {
-            alert("This JSON does not contain a full project (roiLabelData missing).");
+          if (!json.roiPolygons || !json.roiCentroids) {
+            alert("JSON does not contain vector ROI data.");
             return;
           }
           imgWidth = json.imgWidth;
           imgHeight = json.imgHeight;
-          resizeCanvases(imgWidth, imgHeight);
-          roiLabelData = decodeUint16FromBase64(json.roiLabelData);
-          roiCount = json.roiCount || 0;
-          roiPolygons = json.roiPolygons || {};
-          roiCentroids = json.roiCentroids || {};
-
-          // If polygons/centroids missing, rebuild from pixels
-          if (!Object.keys(roiPolygons).length || !Object.keys(roiCentroids).length) {
-            roiPixelMap = {};
-            for (let i = 0; i < roiLabelData.length; i++) {
-              const id = roiLabelData[i];
-              if (id <= 0) continue;
-              const x = i % imgWidth;
-              const y = (i / imgWidth) | 0;
-              if (!roiPixelMap[id]) roiPixelMap[id] = { pixels: [], cx: 0, cy: 0 };
-              roiPixelMap[id].pixels.push({ x, y });
-            }
-            for (const [idStr, obj] of Object.entries(roiPixelMap)) {
-              const arr = obj.pixels;
-              let sx = 0, sy = 0;
-              for (const p of arr) { sx += p.x; sy += p.y; }
-              const n = arr.length || 1;
-              const cx = sx / n;
-              const cy = sy / n;
-              obj.cx = cx;
-              obj.cy = cy;
-              roiCentroids[idStr] = { cx, cy };
-            }
-            buildRoiPolygonsFromPixels(imgWidth, imgHeight);
-          }
-
+          roiPolygons = json.roiPolygons;
+          roiCentroids = json.roiCentroids;
+          roiCount = json.roiCount || Object.keys(roiPolygons).length;
           labels = json.labels || [];
           roiAssignments = json.roiAssignments || {};
           activeLabelId = labels.length ? labels[0].id : null;
 
-          maskLoaded = true;
-          emptyState.style.display = "none";
+          resizeCanvases(imgWidth, imgHeight);
+          buildIdCanvas();
           renderBase();
           renderOverlay();
-          hoverInfo.textContent = `Project loaded: ${imgWidth} × ${imgHeight} · ROIs: ${roiCount}`;
+          maskLoaded = true;
+          emptyState.style.display = "none";
+          hoverInfo.textContent = `Project loaded · ROIs: ${roiCount}`;
           setMaskInfo("Project JSON loaded.");
           updateSelectionStatus("No ROI selected");
-        } catch (err) {
+        } catch(err) {
           console.error(err);
-          alert("Failed to parse JSON. Please check that this is a project file exported from this tool.");
+          alert("Failed to parse JSON.");
         }
       };
       reader.readAsText(file);
     });
 
-    // ===== Label creation / clearing =====
+    exportJsonBtn.addEventListener("click", () => {
+      if (!maskLoaded || roiCount === 0) {
+        alert("Please load a template image or project first.");
+        return;
+      }
+      const obj = {
+        version: 5,
+        imgWidth,
+        imgHeight,
+        roiCount,
+        roiPolygons,
+        roiCentroids,
+        labels,
+        roiAssignments,
+        timestamp: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "root_roi_project.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    exportPngBtn.addEventListener("click", () => {
+      if (!maskLoaded || roiCount === 0) {
+        alert("Please load a template image or project first.");
+        return;
+      }
+      maskCanvas.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "root_roi_vector_map.png";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, "image/png", 1.0);
+    });
+
+    // ===== Label operations =====
     addLabelBtn.addEventListener("click", () => {
       const name = labelNameInput.value.trim();
       const color = labelColorInput.value || getNextColor();
@@ -1244,7 +1371,7 @@
     modeBoxBtn.addEventListener("click", () => setInteractionMode("box"));
     modeMoveBtn.addEventListener("click", () => setInteractionMode("move"));
 
-    // ===== Zoom =====
+    // ===== Zoom & pan =====
     canvasContainer.addEventListener("wheel", e => {
       if (!maskLoaded) return;
       e.preventDefault();
@@ -1273,7 +1400,6 @@
       updateViewTransform();
     }, { passive: false });
 
-    // ===== Move mode (pan) =====
     canvasContainer.addEventListener("mousedown", e => {
       if (!maskLoaded) return;
       if (e.button !== 0) return;
@@ -1301,9 +1427,9 @@
       }
     });
 
-    // ===== Click & box selection =====
+    // ===== Click / box selection / hover =====
     maskCanvas.addEventListener("mousemove", e => {
-      if (!maskLoaded || !roiLabelData) return;
+      if (!maskLoaded || roiCount === 0) return;
       const p = canvasPixelFromEvent(e);
       if (!p) return;
       const roiId = getRoiIdAt(p.x, p.y);
@@ -1323,7 +1449,6 @@
       if (interactionMode === "box" && isDragging && dragStart) {
         dragCurrent = p;
       }
-
       renderOverlay();
     });
 
@@ -1341,7 +1466,7 @@
     });
 
     maskCanvas.addEventListener("mousedown", e => {
-      if (!maskLoaded || !roiLabelData) return;
+      if (!maskLoaded || roiCount === 0) return;
       if (e.button !== 0) return;
       const p = canvasPixelFromEvent(e);
       if (!p) return;
@@ -1367,12 +1492,12 @@
         dragCurrent = p;
         renderOverlay();
       }
-      // Move mode handled by container
+      // move mode handled on container
     });
 
     maskCanvas.addEventListener("mouseup", e => {
       if (e.button !== 0) return;
-      if (!maskLoaded || !roiLabelData) return;
+      if (!maskLoaded || roiCount === 0) return;
       if (interactionMode !== "box") return;
       if (!isDragging || !dragStart) return;
 
@@ -1385,7 +1510,6 @@
         return;
       }
       dragCurrent = p;
-
       const roiIds = getRoiIdsInRect(dragStart.x, dragStart.y, dragCurrent.x, dragCurrent.y);
       applyLabelToRois(roiIds);
 
@@ -1395,83 +1519,29 @@
 
       renderBase();
       renderOverlay();
-
       if (roiIds.length) {
-        updateSelectionStatus(
-          `Box selection affected ${roiIds.length} ROIs (set/cleared according to active label).`
-        );
+        updateSelectionStatus(`Box selection affected ${roiIds.length} ROIs.`);
       } else {
         updateSelectionStatus("No ROI in box selection.");
       }
     });
 
-    // ===== Export project =====
-    exportJsonBtn.addEventListener("click", () => {
-      if (!maskLoaded || !roiLabelData) {
-        alert("Please load a template image or project first.");
-        return;
-      }
-      const obj = {
-        version: 3,
-        imgWidth,
-        imgHeight,
-        roiCount,
-        roiLabelData: encodeUint16ToBase64(roiLabelData),
-        roiPolygons,
-        roiCentroids,
-        labels,
-        roiAssignments,
-        timestamp: new Date().toISOString(),
-      };
-      const blob = new Blob([JSON.stringify(obj, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "root_roi_project.json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    });
-
-    // ===== Export PNG =====
-    exportPngBtn.addEventListener("click", () => {
-      if (!maskLoaded || !roiLabelData) {
-        alert("Please load a template image or project first.");
-        return;
-      }
-      maskCanvas.toBlob(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "root_roi_vector_map.png";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, "image/png", 1.0);
-    });
-
-    // ===== Resize =====
+    // ===== Resize + hover loop =====
     window.addEventListener("resize", () => {
       if (!maskLoaded) return;
       computeBaseScale();
       updateViewTransform();
     });
 
-    // ===== Hover animation loop =====
     function hoverAnimLoop() {
-      const dt = 1 / 60;
+      const dt = 1/60;
       const diff = hoverScaleTarget - hoverScaleCurrent;
-      hoverScaleCurrent += diff * Math.min(1, hoverAnimSpeed * dt);
+      hoverScaleCurrent += diff * Math.min(1, hoverAnimSpeed*dt);
       if (Math.abs(diff) < 0.001) hoverScaleCurrent = hoverScaleTarget;
       renderOverlay();
       requestAnimationFrame(hoverAnimLoop);
     }
 
-    // ===== Init =====
     (function init() {
       setInteractionMode("click");
       updateGlobalStats();
