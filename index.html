@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Root ROI Map Annotator v5 (Pure Vector)</title>
+  <title>Root ROI Map Annotator v5.1 (Pure Vector + BG filter)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
@@ -17,7 +17,6 @@
       --danger: #f97373;
     }
     * { box-sizing: border-box; }
-
     body {
       margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -28,7 +27,6 @@
       display: flex;
       flex-direction: column;
     }
-
     header {
       padding: 0.6rem 1rem;
       border-bottom: 1px solid var(--border);
@@ -37,7 +35,6 @@
       justify-content: space-between;
       align-items: center;
     }
-
     header h1 {
       margin: 0;
       font-size: 1rem;
@@ -45,12 +42,10 @@
       text-transform: uppercase;
       color: #93c5fd;
     }
-
     header span {
       font-size: 0.8rem;
       color: var(--muted);
     }
-
     .pill {
       font-size: 0.75rem;
       padding: 0.2rem 0.6rem;
@@ -62,7 +57,6 @@
       gap: 0.3rem;
       background: rgba(15, 23, 42, 0.85);
     }
-
     main {
       flex: 1;
       display: grid;
@@ -71,14 +65,12 @@
       padding: 0.6rem;
       min-height: 0;
     }
-
     @media (max-width: 1024px) {
       main {
         grid-template-columns: minmax(0, 1fr);
         grid-template-rows: auto auto auto;
       }
     }
-
     .panel {
       background: var(--panel);
       border-radius: 0.75rem;
@@ -88,14 +80,12 @@
       flex-direction: column;
       min-height: 0;
     }
-
     .panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
       margin-bottom: 0.5rem;
     }
-
     .panel-title {
       font-size: 0.85rem;
       font-weight: 600;
@@ -103,30 +93,25 @@
       letter-spacing: 0.08em;
       color: var(--muted);
     }
-
     .panel-subtitle {
       font-size: 0.75rem;
       color: var(--muted);
     }
-
     .panel-body {
       flex: 1;
       overflow: auto;
       padding-right: 0.3rem;
     }
-
     .section {
       margin-bottom: 0.8rem;
       padding-bottom: 0.6rem;
       border-bottom: 1px dashed #1f2937;
     }
-
     .section:last-child {
       border-bottom: none;
       margin-bottom: 0;
       padding-bottom: 0;
     }
-
     .section-title {
       font-size: 0.8rem;
       text-transform: uppercase;
@@ -134,14 +119,12 @@
       color: var(--muted);
       margin-bottom: 0.3rem;
     }
-
     label {
       display: block;
       font-size: 0.8rem;
       color: var(--muted);
       margin-bottom: 0.2rem;
     }
-
     input[type="file"],
     input[type="text"] {
       width: 100%;
@@ -153,16 +136,13 @@
       color: var(--text);
       outline: none;
     }
-
     input[type="file"] {
       padding: 0.2rem 0.3rem;
     }
-
     input[type="text"]:focus {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px var(--accent-soft);
     }
-
     input[type="color"] {
       width: 100%;
       height: 1.8rem;
@@ -172,7 +152,6 @@
       padding: 0;
       cursor: pointer;
     }
-
     .button {
       display: inline-flex;
       align-items: center;
@@ -187,58 +166,47 @@
       gap: 0.3rem;
       transition: all 0.12s ease;
     }
-
     .button.primary {
       background: linear-gradient(135deg, #2563eb, #4f46e5);
       border-color: transparent;
       color: white;
     }
-
     .button.small {
       font-size: 0.75rem;
       padding: 0.18rem 0.5rem;
     }
-
     .button.danger {
       border-color: rgba(248, 113, 113, 0.8);
       color: #fecaca;
     }
-
     .button.icon {
       padding: 0.15rem 0.35rem;
     }
-
     .button:hover {
       border-color: var(--accent);
       background: #020617;
     }
-
     .button.primary:hover {
       box-shadow: 0 10px 25px rgba(37, 99, 235, 0.6);
       transform: translateY(-1px);
     }
-
     .button.danger:hover {
       background: rgba(185, 28, 28, 0.45);
     }
-
     .row {
       display: flex;
       gap: 0.4rem;
       margin-bottom: 0.4rem;
     }
-
     .row > * {
       flex: 1;
     }
-
     .hint {
       font-size: 0.72rem;
       color: var(--muted);
       line-height: 1.4;
       margin-top: 0.25rem;
     }
-
     #canvasContainer {
       flex: 1;
       min-height: 0;
@@ -251,7 +219,6 @@
       justify-content: center;
       overflow: hidden;
     }
-
     #maskCanvas {
       border-radius: 0.6rem;
       box-shadow: 0 14px 35px rgba(0, 0, 0, 0.75);
@@ -259,34 +226,29 @@
       top: 0;
       left: 0;
     }
-
     #overlayCanvas {
       position: absolute;
       top: 0;
       left: 0;
       pointer-events: none;
     }
-
     .empty-state {
       text-align: center;
       color: var(--muted);
       font-size: 0.8rem;
       padding: 1.2rem;
     }
-
     .status-line {
       font-size: 0.72rem;
       color: var(--muted);
       margin-top: 0.3rem;
     }
-
     #labelList {
       display: flex;
       flex-direction: column;
       gap: 0.3rem;
       margin-top: 0.3rem;
     }
-
     .label-item {
       display: flex;
       align-items: center;
@@ -299,17 +261,14 @@
       gap: 0.4rem;
       transition: all 0.12s ease;
     }
-
     .label-item:hover {
       border-color: var(--border);
     }
-
     .label-item.active {
       border-color: var(--accent);
       box-shadow: 0 0 0 1px var(--accent-soft);
       background: radial-gradient(circle at top, var(--accent-soft), #020617);
     }
-
     .label-color-dot {
       width: 14px;
       height: 14px;
@@ -317,24 +276,20 @@
       border: 1px solid #020617;
       flex-shrink: 0;
     }
-
     .label-main {
       flex: 1;
       min-width: 0;
     }
-
     .label-main div:first-child {
       font-size: 0.8rem;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-
     .label-main div:last-child {
       font-size: 0.7rem;
       color: var(--muted);
     }
-
     .badge {
       font-size: 0.7rem;
       padding: 0.05rem 0.35rem;
@@ -342,7 +297,6 @@
       border: 1px solid #475569;
       color: var(--muted);
     }
-
     footer {
       padding: 0.3rem 0.8rem;
       font-size: 0.72rem;
@@ -353,8 +307,6 @@
       justify-content: space-between;
       align-items: center;
     }
-
-    /* hidden offscreen SVG container for parsing */
     #hiddenSvg {
       position: absolute;
       width: 0;
@@ -368,8 +320,8 @@
 <body>
   <header>
     <div>
-      <h1>Root ROI Map Annotator v5</h1>
-      <span>Template image → vector ROS (SVG paths or segmented contours) → black-border ROI map + labels</span>
+      <h1>Root ROI Map Annotator v5.1</h1>
+      <span>Template image → vector ROIs (SVG paths or segmented contours) → black-border ROI map + labels</span>
     </div>
     <div class="pill">
       <span>Click: label / clear</span>
@@ -380,7 +332,7 @@
   </header>
 
   <main>
-    <!-- Left panel -->
+    <!-- left -->
     <aside class="panel">
       <div class="panel-header">
         <div class="panel-title">Input & Files</div>
@@ -391,12 +343,11 @@
           <label for="maskFileInput">SVG (preferred) or PNG/JPEG (black outlines + white background)</label>
           <input type="file" id="maskFileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
           <div class="hint">
-            · If SVG: paths are used directly as vector ROIs (smooth, resolution-independent).<br/>
-            · If PNG/JPEG: we segment, then convert boundaries to polygons (approximate vector).
+            · SVG: paths are used directly as vector ROIs (smooth, resolution-independent).<br/>
+            · PNG/JPEG: white regions are segmented and converted into polygons.
           </div>
           <div id="maskInfo" class="status-line"></div>
         </div>
-
         <div class="section">
           <div class="section-title">2. Import / Export</div>
           <div class="row">
@@ -406,11 +357,9 @@
           <label for="annotationFileInput">Import project JSON</label>
           <input type="file" id="annotationFileInput" accept="application/json,.json" />
           <div class="hint">
-            JSON stores: vector polygons, centroids, labels, and assignments.
-            No raster label map is needed; map is fully reconstructable.
+            JSON keeps vector polygons, centroids, labels, and assignments.
           </div>
         </div>
-
         <div class="section">
           <div class="section-title">3. Interaction mode</div>
           <div class="row">
@@ -423,13 +372,13 @@
       </div>
     </aside>
 
-    <!-- Center: canvas -->
+    <!-- center -->
     <section class="panel">
       <div class="panel-header">
         <div>
           <div class="panel-title">Vector ROI Map View</div>
           <div class="panel-subtitle">
-            Each ROI is an independent vector-like shape: pure white interior, fixed-width black border, smooth outline.
+            Each ROI is an independent vector-like shape with white interior and fixed-width black border.
           </div>
         </div>
         <div id="hoverInfo" class="pill">No image loaded</div>
@@ -439,14 +388,14 @@
         <canvas id="overlayCanvas"></canvas>
         <div id="emptyState" class="empty-state">
           Upload a root template image (SVG recommended).<br/><br/>
-          · SVG: closed paths become ROIs directly. <br/>
-          · Raster: white regions are segmented, then boundaries are vectorized into polygons.<br/>
-          Only closed regions become ROIs; open strokes remain as boundaries.
+          · SVG: closed paths become ROIs directly.<br/>
+          · Raster: white regions are segmented, then boundaries are vectorized.<br/>
+          Large background rectangles are automatically removed.
         </div>
       </div>
     </section>
 
-    <!-- Right panel: labels & stats -->
+    <!-- right -->
     <aside class="panel">
       <div class="panel-header">
         <div class="panel-title">Labels & Stats</div>
@@ -461,9 +410,8 @@
           <input type="color" id="labelColorInput" />
           <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">Add label</button>
           <div class="hint">
-            Click a label to toggle it as active.<br/>
-            · Active label: click/box → set/overwrite that label on selected ROIs (white interior tinted with label color).<br/>
-            · No active label: click/box → clear labels on selected ROIs (pure white interior).
+            Active label: click/box → set/overwrite label on ROIs (tinted interior).<br/>
+            No active label: click/box → clear labels (pure white interior).
           </div>
         </div>
 
@@ -484,22 +432,21 @@
   </main>
 
   <footer>
-    <div>Largest outer region is treated as outside background (ignored).</div>
+    <div>Large background regions are automatically ignored.</div>
     <div id="selectionStatus">No ROI selected</div>
   </footer>
 
-  <!-- hidden SVG container used only for measuring paths -->
   <div id="hiddenSvg"></div>
 
   <script>
-    // ===== DOM refs =====
+    // === DOM refs ===
     const maskCanvas = document.getElementById("maskCanvas");
     const overlayCanvas = document.getElementById("overlayCanvas");
     const ctx = maskCanvas.getContext("2d");
     const overlayCtx = overlayCanvas.getContext("2d");
     const canvasContainer = document.getElementById("canvasContainer");
-    const emptyState = document.getElementById("emptyState");
     const hiddenSvgContainer = document.getElementById("hiddenSvg");
+    const emptyState = document.getElementById("emptyState");
 
     const maskFileInput = document.getElementById("maskFileInput");
     const annotationFileInput = document.getElementById("annotationFileInput");
@@ -523,20 +470,18 @@
     const exportJsonBtn = document.getElementById("exportJsonBtn");
     const exportPngBtn = document.getElementById("exportPngBtn");
 
-    // ===== Global state =====
+    // === global state ===
     let imgWidth = 0;
     let imgHeight = 0;
     let maskLoaded = false;
 
-    // ROI shapes
-    let roiPolygons = {};   // roiId -> [[x,y], ...]
-    let roiCentroids = {};  // roiId -> {cx, cy}
+    let roiPolygons = {};   // id -> [[x,y],...]
+    let roiCentroids = {};  // id -> {cx,cy}
     let roiCount = 0;
 
-    // Labels
-    let labels = [];        // {id, name, color}
+    let labels = [];
     let activeLabelId = null;
-    let roiAssignments = {}; // roiId -> labelId
+    let roiAssignments = {};
 
     const defaultColors = [
       "#ef4444","#f97316","#facc15","#22c55e","#14b8a6",
@@ -544,324 +489,281 @@
     ];
     let colorIndex = 0;
 
-    // Modes
     let interactionMode = "click";
     let isDragging = false;
     let dragStart = null;
     let dragCurrent = null;
 
-    // View transform
     let baseScale = 1;
     let viewScale = 1;
-    const minScale = 0.3;
-    const maxScale = 5;
-    let panX = 0;
-    let panY = 0;
-
+    const minScale = 0.3, maxScale = 5;
+    let panX = 0, panY = 0;
     let isPanning = false;
-    let panStartClientX = 0;
-    let panStartClientY = 0;
-    let panStartX = 0;
-    let panStartY = 0;
+    let panStartClientX = 0, panStartClientY = 0, panStartX = 0, panStartY = 0;
 
-    // Hover animation
     let hoveredRoiId = 0;
     let hoverScaleCurrent = 1.0;
     let hoverScaleTarget = 1.0;
     const hoverScaleMax = 1.06;
     const hoverAnimSpeed = 8.0;
 
-    // Hidden ID canvas for hit-testing (each ROI in a unique color)
     const idCanvas = document.createElement("canvas");
     const idCtx = idCanvas.getContext("2d", { willReadFrequently: true });
 
-    // ===== Utilities =====
+    // === helpers ===
     function hexToRgb(hex) {
       hex = hex.replace("#", "");
-      if (hex.length === 3) {
-        hex = hex.split("").map(c => c + c).join("");
-      }
-      const num = parseInt(hex, 16);
-      return {
-        r: (num >> 16) & 255,
-        g: (num >> 8) & 255,
-        b: num & 255,
-      };
+      if (hex.length === 3) hex = hex.split("").map(c=>c+c).join("");
+      const num = parseInt(hex,16);
+      return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
     }
+    function getNextColor(){ const c = defaultColors[colorIndex%defaultColors.length]; colorIndex++; return c; }
+    function encodeIdToColor(id){ const r=id&255,g=(id>>8)&255,b=(id>>16)&255; return `rgb(${r},${g},${b})`; }
+    function decodeColorToId(r,g,b){ return r + (g<<8) + (b<<16); }
+    function setMaskInfo(t){ maskInfo.textContent = t || ""; }
 
-    function getNextColor() {
-      const c = defaultColors[colorIndex % defaultColors.length];
-      colorIndex++;
-      return c;
-    }
-
-    function encodeIdToColor(id) {
-      const r = id & 0xff;
-      const g = (id >> 8) & 0xff;
-      const b = (id >> 16) & 0xff;
-      return `rgb(${r},${g},${b})`;
-    }
-
-    function decodeColorToId(r, g, b) {
-      const id = r + (g << 8) + (b << 16);
-      return id;
-    }
-
-    function setMaskInfo(text) {
-      maskInfo.textContent = text || "";
-    }
-
-    function setInteractionMode(mode) {
+    function setInteractionMode(mode){
       interactionMode = mode;
-      modeClickBtn.classList.toggle("primary", mode === "click");
-      modeBoxBtn.classList.toggle("primary", mode === "box");
-      modeMoveBtn.classList.toggle("primary", mode === "move");
-      if (mode === "click") {
+      modeClickBtn.classList.toggle("primary", mode==="click");
+      modeBoxBtn.classList.toggle("primary", mode==="box");
+      modeMoveBtn.classList.toggle("primary", mode==="move");
+      if(mode==="click"){
         modeStatus.innerHTML = "Mode: <strong>Click</strong>. Active label → set/overwrite. No label → clear.";
-      } else if (mode === "box") {
-        modeStatus.innerHTML = "Mode: <strong>Box</strong>. Drag rectangle to apply the same logic to many ROIs.";
-      } else {
+      }else if(mode==="box"){
+        modeStatus.innerHTML = "Mode: <strong>Box</strong>. Drag rectangle to affect many ROIs.";
+      }else{
         modeStatus.innerHTML = "Mode: <strong>Move</strong>. Drag canvas, wheel zoom at mouse.";
       }
     }
 
-    function updateGlobalStats() {
-      if (!maskLoaded || roiCount === 0) {
+    function updateGlobalStats(){
+      if(!maskLoaded || roiCount===0){
         globalStats.textContent = "No image/project loaded yet.";
         return;
       }
       const total = roiCount;
-      const labeledSet = new Set(
-        Object.keys(roiAssignments)
-          .filter(k => roiAssignments[k])
-          .map(k => parseInt(k, 10))
-      );
+      const labeledSet = new Set(Object.keys(roiAssignments).filter(k=>roiAssignments[k]).map(k=>+k));
       const labeled = labeledSet.size;
       globalStats.innerHTML = `Total ROIs: <strong>${total}</strong><br/>Labeled ROIs: <strong>${labeled}</strong> (${
-        total ? (labeled / total * 100).toFixed(1) : 0
+        total ? (labeled/total*100).toFixed(1) : 0
       }%)`;
     }
+    function updateSelectionStatus(t){ selectionStatus.textContent = t || "No ROI selected"; }
 
-    function updateSelectionStatus(text) {
-      selectionStatus.textContent = text || "No ROI selected";
-    }
-
-    function resizeCanvases(width, height) {
-      maskCanvas.width = width;
-      maskCanvas.height = height;
-      overlayCanvas.width = width;
-      overlayCanvas.height = height;
-      idCanvas.width = width;
-      idCanvas.height = height;
-
-      maskCanvas.style.width = width + "px";
-      maskCanvas.style.height = height + "px";
-      overlayCanvas.style.width = width + "px";
-      overlayCanvas.style.height = height + "px";
-
+    function resizeCanvases(w,h){
+      maskCanvas.width = w; maskCanvas.height = h;
+      overlayCanvas.width = w; overlayCanvas.height = h;
+      idCanvas.width = w; idCanvas.height = h;
+      maskCanvas.style.width = w+"px";
+      maskCanvas.style.height = h+"px";
+      overlayCanvas.style.width = w+"px";
+      overlayCanvas.style.height = h+"px";
       computeBaseScale();
-      viewScale = 1;
-      panX = 0;
-      panY = 0;
+      viewScale = 1; panX = 0; panY = 0;
       updateViewTransform();
     }
-
-    function computeBaseScale() {
+    function computeBaseScale(){
       const rect = canvasContainer.getBoundingClientRect();
-      if (!imgWidth || !imgHeight || !rect.width || !rect.height) return;
-      baseScale = Math.min(rect.width / imgWidth, rect.height / imgHeight);
+      if(!imgWidth || !imgHeight || !rect.width || !rect.height) return;
+      baseScale = Math.min(rect.width/imgWidth, rect.height/imgHeight);
     }
-
-    function updateViewTransform() {
-      if (!imgWidth || !imgHeight) return;
-      if (!baseScale) computeBaseScale();
+    function updateViewTransform(){
+      if(!imgWidth || !imgHeight) return;
+      if(!baseScale) computeBaseScale();
       const rect = canvasContainer.getBoundingClientRect();
-      const scale = baseScale * viewScale;
-      const tx = (rect.width - imgWidth * scale) / 2 + panX;
-      const ty = (rect.height - imgHeight * scale) / 2 + panY;
-      const transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+      const scale = baseScale*viewScale;
+      const tx = (rect.width-imgWidth*scale)/2 + panX;
+      const ty = (rect.height-imgHeight*scale)/2 + panY;
+      const t = `translate(${tx}px,${ty}px) scale(${scale})`;
       maskCanvas.style.transformOrigin = "top left";
       overlayCanvas.style.transformOrigin = "top left";
-      maskCanvas.style.transform = transform;
-      overlayCanvas.style.transform = transform;
+      maskCanvas.style.transform = t;
+      overlayCanvas.style.transform = t;
     }
 
-    function refreshLabelList() {
+    function refreshLabelList(){
       labelListEl.innerHTML = "";
-      if (!labels.length) {
-        labelEmptyHint.style.display = "block";
-        return;
-      }
-      labelEmptyHint.style.display = "none";
+      if(!labels.length){ labelEmptyHint.style.display="block"; return;}
+      labelEmptyHint.style.display="none";
 
       const counts = {};
-      for (const [roiId, labelId] of Object.entries(roiAssignments)) {
-        if (!labelId) continue;
-        counts[labelId] = (counts[labelId] || 0) + 1;
+      for(const [roiId,labelId] of Object.entries(roiAssignments)){
+        if(!labelId) continue;
+        counts[labelId] = (counts[labelId]||0)+1;
       }
 
-      labels.forEach(label => {
+      labels.forEach(label=>{
         const item = document.createElement("div");
-        item.className = "label-item" + (label.id === activeLabelId ? " active" : "");
-        const colorDot = document.createElement("div");
-        colorDot.className = "label-color-dot";
-        colorDot.style.backgroundColor = label.color;
+        item.className = "label-item" + (label.id===activeLabelId?" active":"");
+        const dot = document.createElement("div");
+        dot.className="label-color-dot";
+        dot.style.backgroundColor = label.color;
 
         const main = document.createElement("div");
-        main.className = "label-main";
+        main.className="label-main";
         const nDiv = document.createElement("div");
         nDiv.textContent = label.name || "(Untitled)";
         const mDiv = document.createElement("div");
-        mDiv.textContent = `ID: ${label.id} · ROIs: ${counts[label.id] || 0}`;
-        main.appendChild(nDiv);
-        main.appendChild(mDiv);
+        mDiv.textContent = `ID: ${label.id} · ROIs: ${counts[label.id]||0}`;
+        main.appendChild(nDiv); main.appendChild(mDiv);
 
-        const rightBox = document.createElement("div");
-        rightBox.style.display = "flex";
-        rightBox.style.alignItems = "center";
-        rightBox.style.gap = "0.25rem";
-
+        const right = document.createElement("div");
+        right.style.display="flex"; right.style.alignItems="center"; right.style.gap="0.25rem";
         const badge = document.createElement("div");
-        badge.className = "badge";
-        badge.textContent = "Active";
-        if (label.id !== activeLabelId) badge.style.visibility = "hidden";
-
+        badge.className="badge"; badge.textContent="Active";
+        if(label.id!==activeLabelId) badge.style.visibility="hidden";
         const delBtn = document.createElement("button");
-        delBtn.className = "button small icon";
-        delBtn.textContent = "×";
-        delBtn.title = "Delete label";
-        delBtn.addEventListener("click", (e) => {
+        delBtn.className="button small icon"; delBtn.textContent="×"; delBtn.title="Delete label";
+        delBtn.addEventListener("click",e=>{
           e.stopPropagation();
           deleteLabel(label.id);
         });
+        right.appendChild(badge); right.appendChild(delBtn);
 
-        rightBox.appendChild(badge);
-        rightBox.appendChild(delBtn);
-
-        item.appendChild(colorDot);
-        item.appendChild(main);
-        item.appendChild(rightBox);
-
-        item.addEventListener("click", () => {
-          if (activeLabelId === label.id) {
-            activeLabelId = null;
-          } else {
-            activeLabelId = label.id;
-          }
+        item.appendChild(dot); item.appendChild(main); item.appendChild(right);
+        item.addEventListener("click",()=>{
+          activeLabelId = (activeLabelId===label.id? null: label.id);
           refreshLabelList();
         });
-
         labelListEl.appendChild(item);
       });
     }
 
-    function deleteLabel(labelId) {
-      labels = labels.filter(l => l.id !== labelId);
-      if (activeLabelId === labelId) activeLabelId = null;
-      for (const [roiId, lId] of Object.entries(roiAssignments)) {
-        if (lId === labelId) delete roiAssignments[roiId];
+    function deleteLabel(id){
+      labels = labels.filter(l=>l.id!==id);
+      if(activeLabelId===id) activeLabelId=null;
+      for(const [roiId,lid] of Object.entries(roiAssignments)){
+        if(lid===id) delete roiAssignments[roiId];
       }
       refreshLabelList();
       updateGlobalStats();
-      renderBase();
-      renderOverlay();
+      renderBase(); renderOverlay();
     }
 
-    function addLabel(name, colorInputValue) {
-      const color = colorInputValue || getNextColor();
-      const id = "L" + (labels.length + 1);
-      labels.push({ id, name: name || `Label ${labels.length + 1}`, color });
+    function addLabel(name,color){
+      const c = color || getNextColor();
+      const id = "L"+(labels.length+1);
+      labels.push({id, name: name||`Label ${labels.length+1}`, color:c});
       activeLabelId = id;
       refreshLabelList();
       labelColorInput.value = getNextColor();
     }
 
-    // ===== Hit-test using ID canvas =====
-    function buildIdCanvas() {
+    // ---- background ROI filter: drop huge rectangles / huge areas ----
+    function filterBackgroundPolygons(){
+      if(!roiCount) return;
+      const imgArea = imgWidth * imgHeight;
+      const newPolys = {};
+      const newCents = {};
+      let newId = 1;
+      for(let id=1; id<=roiCount; id++){
+        const poly = roiPolygons[id];
+        const cent = roiCentroids[id];
+        if(!poly || poly.length<3 || !cent) continue;
+        let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+        let area = 0;
+        for(let i=0;i<poly.length;i++){
+          const [x1,y1] = poly[i];
+          const [x2,y2] = poly[(i+1)%poly.length];
+          area += x1*y2 - x2*y1;
+          if(x1<minX) minX=x1;
+          if(x1>maxX) maxX=x1;
+          if(y1<minY) minY=y1;
+          if(y1>maxY) maxY=y1;
+        }
+        area = Math.abs(area/2);
+        const bboxW = maxX-minX;
+        const bboxH = maxY-minY;
+
+        const bigArea = area > imgArea*0.5;
+        const bigBox  = (bboxW > imgWidth*0.8 && bboxH > imgHeight*0.8);
+
+        // 大面积/大矩形认为是背景，直接跳过
+        if(bigArea || bigBox) continue;
+
+        newPolys[newId] = poly;
+        newCents[newId] = cent;
+        newId++;
+      }
+      roiPolygons = newPolys;
+      roiCentroids = newCents;
+      roiCount = newId-1;
+    }
+
+    // ---- idCanvas ----
+    function buildIdCanvas(){
       idCanvas.width = imgWidth;
       idCanvas.height = imgHeight;
-      idCtx.clearRect(0, 0, imgWidth, imgHeight);
+      idCtx.clearRect(0,0,imgWidth,imgHeight);
       idCtx.imageSmoothingEnabled = false;
 
-      for (let id = 1; id <= roiCount; id++) {
+      for(let id=1; id<=roiCount; id++){
         const poly = roiPolygons[id];
-        if (!poly || poly.length < 3) continue;
+        if(!poly || poly.length<3) continue;
         idCtx.beginPath();
-        idCtx.moveTo(poly[0][0], poly[0][1]);
-        for (let i = 1; i < poly.length; i++) {
-          idCtx.lineTo(poly[i][0], poly[i][1]);
-        }
+        idCtx.moveTo(poly[0][0],poly[0][1]);
+        for(let i=1;i<poly.length;i++) idCtx.lineTo(poly[i][0],poly[i][1]);
         idCtx.closePath();
         idCtx.fillStyle = encodeIdToColor(id);
         idCtx.fill();
       }
     }
 
-    function getRoiIdAt(x, y) {
-      if (!roiCount) return 0;
-      const pixel = idCtx.getImageData(x, y, 1, 1).data;
-      const r = pixel[0], g = pixel[1], b = pixel[2];
-      const id = decodeColorToId(r, g, b);
-      if (id < 0 || id > roiCount) return 0;
-      return id;
+    function getRoiIdAt(x,y){
+      if(!roiCount) return 0;
+      const d = idCtx.getImageData(x,y,1,1).data;
+      const id = decodeColorToId(d[0],d[1],d[2]);
+      return (id>0 && id<=roiCount)? id : 0;
     }
-
-    function getRoiIdsInRect(x1, y1, x2, y2) {
-      const minX = Math.max(0, Math.min(x1, x2));
-      const maxX = Math.min(imgWidth - 1, Math.max(x1, x2));
-      const minY = Math.max(0, Math.min(y1, y2));
-      const maxY = Math.min(imgHeight - 1, Math.max(y1, y2));
-      const w = maxX - minX + 1;
-      const h = maxY - minY + 1;
-      const imgData = idCtx.getImageData(minX, minY, w, h).data;
+    function getRoiIdsInRect(x1,y1,x2,y2){
+      const minX = Math.max(0,Math.min(x1,x2));
+      const maxX = Math.min(imgWidth-1,Math.max(x1,x2));
+      const minY = Math.max(0,Math.min(y1,y2));
+      const maxY = Math.min(imgHeight-1,Math.max(y1,y2));
+      const w = maxX-minX+1, h = maxY-minY+1;
+      const imgData = idCtx.getImageData(minX,minY,w,h).data;
       const set = new Set();
-      for (let i = 0; i < imgData.length; i += 4) {
-        const r = imgData[i], g = imgData[i+1], b = imgData[i+2];
-        const id = decodeColorToId(r, g, b);
-        if (id > 0 && id <= roiCount) set.add(id);
+      for(let i=0;i<imgData.length;i+=4){
+        const id = decodeColorToId(imgData[i],imgData[i+1],imgData[i+2]);
+        if(id>0 && id<=roiCount) set.add(id);
       }
       return Array.from(set);
     }
 
-    // ===== Base render: white interior + black border, label color = tint =====
-    function renderBase() {
-      if (!maskLoaded || roiCount === 0) return;
-      ctx.clearRect(0, 0, imgWidth, imgHeight);
+    // ---- render ----
+    function renderBase(){
+      if(!maskLoaded || roiCount===0) return;
+      ctx.clearRect(0,0,imgWidth,imgHeight);
       ctx.save();
-      ctx.fillStyle = "#020617";
-      ctx.fillRect(0, 0, imgWidth, imgHeight);
+      ctx.fillStyle="#020617";
+      ctx.fillRect(0,0,imgWidth,imgHeight);
       ctx.restore();
 
       ctx.save();
-      ctx.lineJoin = "round";
-      ctx.lineCap = "round";
-      ctx.miterLimit = 2;
+      ctx.lineJoin="round";
+      ctx.lineCap="round";
+      ctx.miterLimit=2;
 
-      for (let id = 1; id <= roiCount; id++) {
+      for(let id=1; id<=roiCount; id++){
         const poly = roiPolygons[id];
-        if (!poly || poly.length < 3) continue;
-
+        if(!poly || poly.length<3) continue;
         const labelId = roiAssignments[id];
-        let fillColor = "#ffffff"; // pure white interior by default
-        if (labelId) {
-          const label = labels.find(l => l.id === labelId);
-          if (label) {
-            const { r, g, b } = hexToRgb(label.color);
-            fillColor = `rgba(${r},${g},${b},0.35)`; // tinted but not grey
+        let fillColor = "#ffffff";
+        if(labelId){
+          const label = labels.find(l=>l.id===labelId);
+          if(label){
+            const {r,g,b} = hexToRgb(label.color);
+            fillColor = `rgba(${r},${g},${b},0.35)`;
           }
         }
-
         ctx.beginPath();
-        ctx.moveTo(poly[0][0], poly[0][1]);
-        for (let i = 1; i < poly.length; i++) {
-          ctx.lineTo(poly[i][0], poly[i][1]);
-        }
+        ctx.moveTo(poly[0][0],poly[0][1]);
+        for(let i=1;i<poly.length;i++) ctx.lineTo(poly[i][0],poly[i][1]);
         ctx.closePath();
 
         ctx.fillStyle = fillColor;
         ctx.strokeStyle = "#000000";
         ctx.lineWidth = 1.2;
-
         ctx.fill();
         ctx.stroke();
       }
@@ -871,55 +773,45 @@
       refreshLabelList();
     }
 
-    // ===== Overlay: box selection + hover float（沿用你之前的逻辑） =====
-    function renderOverlay() {
-      overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-
-      if (isDragging && dragStart && dragCurrent && interactionMode === "box") {
+    function renderOverlay(){
+      overlayCtx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);
+      if(isDragging && dragStart && dragCurrent && interactionMode==="box"){
         overlayCtx.save();
-        overlayCtx.setLineDash([4, 3]);
-        overlayCtx.lineWidth = 1.5;
-        overlayCtx.strokeStyle = "rgba(96,165,250,0.9)";
-        overlayCtx.fillStyle = "rgba(37,99,235,0.18)";
-        const x = Math.min(dragStart.x, dragCurrent.x);
-        const y = Math.min(dragStart.y, dragCurrent.y);
-        const w = Math.abs(dragCurrent.x - dragStart.x);
-        const h = Math.abs(dragCurrent.y - dragStart.y);
-        overlayCtx.fillRect(x, y, w, h);
-        overlayCtx.strokeRect(x, y, w, h);
+        overlayCtx.setLineDash([4,3]);
+        overlayCtx.lineWidth=1.5;
+        overlayCtx.strokeStyle="rgba(96,165,250,0.9)";
+        overlayCtx.fillStyle="rgba(37,99,235,0.18)";
+        const x = Math.min(dragStart.x,dragCurrent.x);
+        const y = Math.min(dragStart.y,dragCurrent.y);
+        const w = Math.abs(dragCurrent.x-dragStart.x);
+        const h = Math.abs(dragCurrent.y-dragStart.y);
+        overlayCtx.fillRect(x,y,w,h);
+        overlayCtx.strokeRect(x,y,w,h);
         overlayCtx.restore();
       }
 
-      if (hoveredRoiId > 0 && roiPolygons[hoveredRoiId]) {
+      if(hoveredRoiId>0 && roiPolygons[hoveredRoiId]){
         const poly = roiPolygons[hoveredRoiId];
         const center = roiCentroids[hoveredRoiId];
-        if (poly && center) {
-          const { cx, cy } = center;
+        if(poly && center){
+          const {cx,cy} = center;
           const labelId = roiAssignments[hoveredRoiId];
-          let baseColor = labelId
-            ? (labels.find(l => l.id === labelId)?.color || "#6366f1")
-            : "#94a3b8";
-          const { r, g, b } = hexToRgb(baseColor);
-
+          let baseColor = labelId ? (labels.find(l=>l.id===labelId)?.color || "#6366f1") : "#94a3b8";
+          const {r,g,b} = hexToRgb(baseColor);
           overlayCtx.save();
-          overlayCtx.translate(cx, cy);
-          overlayCtx.scale(hoverScaleCurrent, hoverScaleCurrent);
-          overlayCtx.translate(-cx, -cy);
-
+          overlayCtx.translate(cx,cy);
+          overlayCtx.scale(hoverScaleCurrent,hoverScaleCurrent);
+          overlayCtx.translate(-cx,-cy);
           overlayCtx.beginPath();
-          overlayCtx.moveTo(poly[0][0], poly[0][1]);
-          for (let i = 1; i < poly.length; i++) {
-            overlayCtx.lineTo(poly[i][0], poly[i][1]);
-          }
+          overlayCtx.moveTo(poly[0][0],poly[0][1]);
+          for(let i=1;i<poly.length;i++) overlayCtx.lineTo(poly[i][0],poly[i][1]);
           overlayCtx.closePath();
-
-          overlayCtx.shadowColor = "rgba(15,23,42,0.9)";
-          overlayCtx.shadowBlur = 12;
-          overlayCtx.shadowOffsetY = 4;
-          overlayCtx.fillStyle = `rgba(${Math.min(r+30,255)},${Math.min(g+30,255)},${Math.min(b+30,255)},0.9)`;
-          overlayCtx.strokeStyle = "rgba(248,250,252,0.95)";
-          overlayCtx.lineWidth = 1.6;
-
+          overlayCtx.shadowColor="rgba(15,23,42,0.9)";
+          overlayCtx.shadowBlur=12;
+          overlayCtx.shadowOffsetY=4;
+          overlayCtx.fillStyle=`rgba(${Math.min(r+30,255)},${Math.min(g+30,255)},${Math.min(b+30,255)},0.9)`;
+          overlayCtx.strokeStyle="rgba(248,250,252,0.95)";
+          overlayCtx.lineWidth=1.6;
           overlayCtx.fill();
           overlayCtx.stroke();
           overlayCtx.restore();
@@ -927,374 +819,264 @@
       }
     }
 
-    // ===== Coordinate helpers =====
-    function canvasPixelFromEvent(evt) {
+    function canvasPixelFromEvent(e){
       const rect = maskCanvas.getBoundingClientRect();
-      const scaleX = maskCanvas.width / rect.width;
-      const scaleY = maskCanvas.height / rect.height;
-      const x = Math.floor((evt.clientX - rect.left) * scaleX);
-      const y = Math.floor((evt.clientY - rect.top) * scaleY);
-      if (x < 0 || y < 0 || x >= maskCanvas.width || y >= maskCanvas.height) return null;
-      return { x, y };
+      const scaleX = maskCanvas.width/rect.width;
+      const scaleY = maskCanvas.height/rect.height;
+      const x = Math.floor((e.clientX-rect.left)*scaleX);
+      const y = Math.floor((e.clientY-rect.top)*scaleY);
+      if(x<0||y<0||x>=maskCanvas.width||y>=maskCanvas.height) return null;
+      return {x,y};
     }
 
-    // ===== Apply label logic =====
-    function applyLabelToRois(roiIds) {
-      roiIds.forEach(id => {
-        if (id <= 0) return;
-        if (activeLabelId) {
-          roiAssignments[id] = activeLabelId;
-        } else {
-          delete roiAssignments[id];
-        }
+    function applyLabelToRois(ids){
+      ids.forEach(id=>{
+        if(id<=0) return;
+        if(activeLabelId) roiAssignments[id]=activeLabelId;
+        else delete roiAssignments[id];
       });
     }
-
-    function applyLabelToSingleRoi(id) {
-      if (id <= 0) return;
-      if (activeLabelId) {
-        roiAssignments[id] = activeLabelId;
-      } else {
-        delete roiAssignments[id];
-      }
+    function applyLabelToSingleRoi(id){
+      if(id<=0) return;
+      if(activeLabelId) roiAssignments[id]=activeLabelId;
+      else delete roiAssignments[id];
     }
 
-    // ===== SVG vector pipeline =====
-    function loadSvgAsVectorPolygons(svgText) {
-      hiddenSvgContainer.innerHTML = "";
+    // ---- SVG pipeline ----
+    function loadSvgAsVectorPolygons(svgText){
+      hiddenSvgContainer.innerHTML="";
       const parser = new DOMParser();
-      const doc = parser.parseFromString(svgText, "image/svg+xml");
+      const doc = parser.parseFromString(svgText,"image/svg+xml");
       const svgElem = doc.documentElement;
-
-      // Put into DOM so we can use getTotalLength/getPointAtLength
-      const imported = document.importNode(svgElem, true);
+      const imported = document.importNode(svgElem,true);
       hiddenSvgContainer.appendChild(imported);
 
-      // viewBox or width/height
-      let vb = imported.getAttribute("viewBox");
-      if (vb) {
-        const parts = vb.split(/\s+/).map(Number);
-        imgWidth = parts[2];
-        imgHeight = parts[3];
-      } else {
+      const vb = imported.getAttribute("viewBox");
+      if(vb){
+        const p = vb.split(/\s+/).map(Number);
+        imgWidth = p[2]; imgHeight = p[3];
+      }else{
         imgWidth = parseFloat(imported.getAttribute("width")) || 1000;
         imgHeight = parseFloat(imported.getAttribute("height")) || 1000;
       }
-      resizeCanvases(imgWidth, imgHeight);
+      resizeCanvases(imgWidth,imgHeight);
 
-      roiPolygons = {};
-      roiCentroids = {};
-      roiCount = 0;
-
+      roiPolygons={}; roiCentroids={}; roiCount=0;
       const paths = imported.querySelectorAll("path, polygon, rect");
-      paths.forEach((el) => {
-        let poly = [];
-        if (el.tagName.toLowerCase() === "path") {
+      paths.forEach(el=>{
+        let poly=[];
+        const tag = el.tagName.toLowerCase();
+        if(tag==="path"){
           const pathElem = el;
-          try {
+          try{
             const length = pathElem.getTotalLength();
-            const sampleCount = Math.max(200, Math.floor(length / 2));
-            for (let i = 0; i <= sampleCount; i++) {
-              const pt = pathElem.getPointAtLength((length * i) / sampleCount);
-              poly.push([pt.x, pt.y]);
+            const sampleCount = Math.max(200,Math.floor(length/2));
+            for(let i=0;i<=sampleCount;i++){
+              const pt = pathElem.getPointAtLength(length*i/sampleCount);
+              poly.push([pt.x,pt.y]);
             }
-          } catch (err) {
-            // skip problematic paths
-          }
-        } else if (el.tagName.toLowerCase() === "polygon") {
-          const pointsAttr = el.getAttribute("points") || "";
-          const pts = pointsAttr.trim().split(/[\s,]+/).map(Number);
-          for (let i = 0; i + 1 < pts.length; i += 2) {
-            poly.push([pts[i], pts[i+1]]);
-          }
-        } else if (el.tagName.toLowerCase() === "rect") {
-          const x = parseFloat(el.getAttribute("x") || "0");
-          const y = parseFloat(el.getAttribute("y") || "0");
-          const w = parseFloat(el.getAttribute("width") || "0");
-          const h = parseFloat(el.getAttribute("height") || "0");
-          poly = [
-            [x, y],
-            [x + w, y],
-            [x + w, y + h],
-            [x, y + h],
-          ];
+          }catch{}
+        }else if(tag==="polygon"){
+          const ptsAttr = el.getAttribute("points") || "";
+          const pts = ptsAttr.trim().split(/[\s,]+/).map(Number);
+          for(let i=0;i+1<pts.length;i+=2) poly.push([pts[i],pts[i+1]]);
+        }else if(tag==="rect"){
+          const x = parseFloat(el.getAttribute("x")||"0");
+          const y = parseFloat(el.getAttribute("y")||"0");
+          const w = parseFloat(el.getAttribute("width")||"0");
+          const h = parseFloat(el.getAttribute("height")||"0");
+          poly = [[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
         }
-        if (poly.length < 3) return;
-
-        // 计算质心
-        let sx = 0, sy = 0;
-        poly.forEach(p => { sx += p[0]; sy += p[1]; });
-        const cx = sx / poly.length;
-        const cy = sy / poly.length;
-
+        if(poly.length<3) return;
+        let sx=0,sy=0;
+        poly.forEach(p=>{sx+=p[0]; sy+=p[1];});
+        const cx = sx/poly.length, cy = sy/poly.length;
         roiCount++;
-        roiPolygons[roiCount] = poly;
-        roiCentroids[roiCount] = { cx, cy };
+        roiPolygons[roiCount]=poly;
+        roiCentroids[roiCount]={cx,cy};
       });
 
-      // 去掉最大的外层区域（如果有）
-      removeLargestOuterRegion();
+      // 过滤大背景多边形
+      filterBackgroundPolygons();
 
       buildIdCanvas();
       renderBase();
       renderOverlay();
-      maskLoaded = true;
-      emptyState.style.display = "none";
-      hoverInfo.textContent = `SVG loaded · ROIs: ${roiCount}`;
-      setMaskInfo(`SVG parsed as vector ROIs: ${roiCount}`);
+      maskLoaded=true;
+      emptyState.style.display="none";
+      hoverInfo.textContent=`SVG loaded · ROIs: ${roiCount}`;
+      setMaskInfo(`SVG parsed as vector ROIs: ${roiCount} (background filtered).`);
       updateSelectionStatus("No ROI selected");
     }
 
-    function removeLargestOuterRegion() {
-      // 简单地把面积最大那个 ROI 当背景删掉
-      if (!roiCount) return;
-      let maxId = 0;
-      let maxArea = 0;
-      const areas = {};
-      for (let id = 1; id <= roiCount; id++) {
-        const poly = roiPolygons[id];
-        if (!poly) continue;
-        let area = 0;
-        for (let i = 0; i < poly.length; i++) {
-          const [x1, y1] = poly[i];
-          const [x2, y2] = poly[(i+1) % poly.length];
-          area += x1 * y2 - x2 * y1;
-        }
-        area = Math.abs(area / 2);
-        areas[id] = area;
-        if (area > maxArea) {
-          maxArea = area;
-          maxId = id;
-        }
+    // ---- raster pipeline ----
+    function segmentRasterToPolygons(img){
+      const maxDim=2000;
+      const scale=Math.min(maxDim/Math.max(img.width,img.height),4);
+      const segW=Math.round(img.width*scale);
+      const segH=Math.round(img.height*scale);
+
+      const segCanvas=document.createElement("canvas");
+      segCanvas.width=segW; segCanvas.height=segH;
+      const segCtx=segCanvas.getContext("2d");
+      segCtx.imageSmoothingEnabled=true;
+      segCtx.setTransform(scale,0,0,scale,0,0);
+      segCtx.drawImage(img,0,0);
+
+      imgWidth=segW; imgHeight=segH;
+      resizeCanvases(imgWidth,imgHeight);
+
+      const imageData=segCtx.getImageData(0,0,segW,segH);
+      const data=imageData.data;
+      const pixels=segW*segH;
+      const labelsArr=new Int32Array(pixels);
+      const isBoundary=new Uint8Array(pixels);
+
+      for(let i=0;i<pixels;i++){
+        const r=data[i*4],g=data[i*4+1],b=data[i*4+2],a=data[i*4+3];
+        const bright=(r+g+b)/3;
+        if(a>0 && bright<220) isBoundary[i]=1;
       }
-      if (maxId > 0) {
-        delete roiPolygons[maxId];
-        delete roiCentroids[maxId];
-        // 重新压紧 ID（简单做法）
-        const newPolys = {};
-        const newCents = {};
-        let newId = 1;
-        Object.keys(roiPolygons).sort((a,b)=>a-b).forEach(k => {
-          const oldId = parseInt(k,10);
-          newPolys[newId] = roiPolygons[oldId];
-          newCents[newId] = roiCentroids[oldId];
-          newId++;
-        });
-        roiPolygons = newPolys;
-        roiCentroids = newCents;
-        roiCount = newId - 1;
-      }
-    }
-
-    // ===== Raster segmentation → vector polygons（与你之前逻辑类似，但只保留多边形） =====
-    function segmentRasterToPolygons(img) {
-      const maxDim = 2000;
-      const scale = Math.min(maxDim / Math.max(img.width, img.height), 4);
-      const segW = Math.round(img.width * scale);
-      const segH = Math.round(img.height * scale);
-
-      const segCanvas = document.createElement("canvas");
-      segCanvas.width = segW;
-      segCanvas.height = segH;
-      const segCtx = segCanvas.getContext("2d");
-      segCtx.imageSmoothingEnabled = true;
-      segCtx.setTransform(scale, 0, 0, scale, 0, 0);
-      segCtx.drawImage(img, 0, 0);
-
-      imgWidth = segW;
-      imgHeight = segH;
-      resizeCanvases(imgWidth, imgHeight);
-
-      const imageData = segCtx.getImageData(0, 0, segW, segH);
-      const data = imageData.data;
-      const pixels = segW * segH;
-
-      const labelsArr = new Int32Array(pixels);
-      const isBoundary = new Uint8Array(pixels);
-
-      for (let i = 0; i < pixels; i++) {
-        const r = data[i*4];
-        const g = data[i*4+1];
-        const b = data[i*4+2];
-        const a = data[i*4+3];
-        const bright = (r+g+b)/3;
-        if (a>0 && bright<220) isBoundary[i] = 1;
-      }
-
-      let currentLabel = 0;
-      const stack = [];
-      function pushIfValid(idx) {
-        if (idx<0 || idx>=pixels) return;
-        if (isBoundary[idx]) return;
-        if (labelsArr[idx] !== 0) return;
-        labelsArr[idx] = currentLabel;
+      let currentLabel=0;
+      const stack=[];
+      function pushIfValid(idx){
+        if(idx<0||idx>=pixels) return;
+        if(isBoundary[idx]) return;
+        if(labelsArr[idx]!==0) return;
+        labelsArr[idx]=currentLabel;
         stack.push(idx);
       }
-
-      for (let i = 0; i < pixels; i++) {
-        if (isBoundary[i]) continue;
-        if (labelsArr[i] !== 0) continue;
+      for(let i=0;i<pixels;i++){
+        if(isBoundary[i]||labelsArr[i]!==0) continue;
         currentLabel++;
-        labelsArr[i] = currentLabel;
-        stack.length = 0;
-        stack.push(i);
-        while (stack.length>0) {
-          const idx = stack.pop();
-          const x = idx % segW;
-          const y = (idx / segW) | 0;
-          if (x>0) pushIfValid(idx-1);
-          if (x<segW-1) pushIfValid(idx+1);
-          if (y>0) pushIfValid(idx-segW);
-          if (y<segH-1) pushIfValid(idx+segW);
+        labelsArr[i]=currentLabel;
+        stack.length=0; stack.push(i);
+        while(stack.length){
+          const idx=stack.pop();
+          const x=idx%segW, y=(idx/segW)|0;
+          if(x>0) pushIfValid(idx-1);
+          if(x<segW-1) pushIfValid(idx+1);
+          if(y>0) pushIfValid(idx-segW);
+          if(y<segH-1) pushIfValid(idx+segW);
         }
       }
 
-      const areas = new Array(currentLabel+1).fill(0);
-      for (let i=0;i<pixels;i++){
-        const l = labelsArr[i];
-        if (l>0) areas[l]++;
+      const areas=new Array(currentLabel+1).fill(0);
+      for(let i=0;i<pixels;i++){
+        const l=labelsArr[i]; if(l>0) areas[l]++;
       }
-      let largestLabel = 0;
-      let largestArea = 0;
-      for (let l=1;l<=currentLabel;l++){
-        if (areas[l]>largestArea){
-          largestArea = areas[l];
-          largestLabel = l;
+      let largestLabel=0, largestArea=0;
+      for(let l=1;l<=currentLabel;l++){
+        if(areas[l]>largestArea){largestArea=areas[l];largestLabel=l;}
+      }
+      const labelMap=new Int32Array(currentLabel+1);
+      let newId=1;
+      for(let l=1;l<=currentLabel;l++){
+        labelMap[l]=(l===largestLabel)?0:newId++;
+      }
+
+      const roiPixelMap={};
+      for(let i=0;i<pixels;i++){
+        const old=labelsArr[i]; const nv=labelMap[old];
+        if(nv>0){
+          const x=i%segW, y=(i/segW)|0;
+          if(!roiPixelMap[nv]) roiPixelMap[nv]=[];
+          roiPixelMap[nv].push({x,y});
         }
       }
 
-      const labelMap = new Int32Array(currentLabel+1);
-      let newId = 1;
-      for (let l=1;l<=currentLabel;l++){
-        if (l===largestLabel) labelMap[l]=0;
-        else labelMap[l]=newId++;
-      }
-
-      const roiPixelMap = {};
-      for (let i=0;i<pixels;i++){
-        const old = labelsArr[i];
-        const newVal = labelMap[old];
-        if (newVal>0){
-          const x = i%segW;
-          const y = (i/segW)|0;
-          if (!roiPixelMap[newVal]) roiPixelMap[newVal] = [];
-          roiPixelMap[newVal].push({x,y});
-        }
-      }
-
-      // build polygons + centroids
-      roiPolygons = {};
-      roiCentroids = {};
-      roiCount = newId-1;
-
-      for (let id=1; id<=roiCount; id++){
-        const pix = roiPixelMap[id] || [];
-        if (!pix.length) continue;
-        const pixelSet = new Set(pix.map(p => p.x + "," + p.y));
-        const boundary = [];
-        for (const p of pix){
-          const neighbors = [
+      roiPolygons={}; roiCentroids={}; roiCount=newId-1;
+      for(let id=1;id<=roiCount;id++){
+        const pix=roiPixelMap[id]||[];
+        if(!pix.length) continue;
+        const pixelSet=new Set(pix.map(p=>p.x+","+p.y));
+        const boundary=[];
+        for(const p of pix){
+          const nb=[
             (p.x-1)+","+p.y,
             (p.x+1)+","+p.y,
             p.x+","+(p.y-1),
-            p.x+","+(p.y+1)
+            p.x+","+(p.y+1),
           ];
-          let isB = false;
-          for (const nb of neighbors){
-            if (!pixelSet.has(nb)){
-              isB = true;
-              break;
-            }
-          }
-          if (isB) boundary.push(p);
+          let isB=false;
+          for(const s of nb){ if(!pixelSet.has(s)){isB=true;break;} }
+          if(isB) boundary.push(p);
         }
-        if (!boundary.length) continue;
-
-        let sx=0, sy=0;
-        boundary.forEach(p=>{sx+=p.x; sy+=p.y;});
-        const cx = sx / boundary.length;
-        const cy = sy / boundary.length;
-
+        if(!boundary.length) continue;
+        let sx=0,sy=0;
+        boundary.forEach(p=>{sx+=p.x;sy+=p.y;});
+        const cx=sx/boundary.length, cy=sy/boundary.length;
         boundary.sort((a,b)=>{
-          const ta = Math.atan2(a.y-cy, a.x-cx);
-          const tb = Math.atan2(b.y-cy, b.x-cx);
+          const ta=Math.atan2(a.y-cy,a.x-cx);
+          const tb=Math.atan2(b.y-cy,b.x-cx);
           return ta-tb;
         });
-
-        const step = Math.max(1, Math.floor(boundary.length/1200));
+        const step=Math.max(1,Math.floor(boundary.length/1200));
         const poly=[];
-        for (let i=0;i<boundary.length;i+=step){
-          poly.push([boundary[i].x+0.5, boundary[i].y+0.5]);
+        for(let i=0;i<boundary.length;i+=step){
+          poly.push([boundary[i].x+0.5,boundary[i].y+0.5]);
         }
-        roiPolygons[id] = poly;
-        roiCentroids[id] = {cx,cy};
+        roiPolygons[id]=poly;
+        roiCentroids[id]={cx,cy};
       }
 
-      setMaskInfo(`Raster segmentation (high-res ${segW}×${segH}), ROIs: ${roiCount} (outer background removed).`);
+      // 背景大区域过滤
+      filterBackgroundPolygons();
+
+      setMaskInfo(`Raster segmentation (high-res ${segW}×${segH}), ROIs: ${roiCount} (background filtered).`);
       buildIdCanvas();
       renderBase();
       renderOverlay();
-      maskLoaded = true;
-      emptyState.style.display = "none";
-      hoverInfo.textContent = `Raster segmented · ROIs: ${roiCount}`;
+      maskLoaded=true;
+      emptyState.style.display="none";
+      hoverInfo.textContent=`Raster segmented · ROIs: ${roiCount}`;
       updateSelectionStatus("No ROI selected");
     }
 
-    // ===== Load image entry point =====
-    maskFileInput.addEventListener("change", e => {
-      const file = e.target.files[0];
-      if (!file) return;
+    // ---- I/O ----
+    maskFileInput.addEventListener("change",e=>{
+      const file=e.target.files[0];
+      if(!file) return;
       const isSvg = file.name.toLowerCase().endsWith(".svg") || file.type.includes("svg");
-      if (isSvg) {
-        const reader = new FileReader();
-        reader.onload = evt => {
-          loadSvgAsVectorPolygons(evt.target.result);
-        };
+      if(isSvg){
+        const reader=new FileReader();
+        reader.onload = ev=> loadSvgAsVectorPolygons(ev.target.result);
         reader.readAsText(file);
-      } else {
-        const img = new Image();
-        img.onload = () => {
-          segmentRasterToPolygons(img);
-        };
-        img.onerror = () => {
-          alert("Failed to load raster image. Please use black-outline + white-background PNG/JPEG, or SVG.");
-        };
-        const url = URL.createObjectURL(file);
-        img.src = url;
+      }else{
+        const img=new Image();
+        img.onload = ()=> segmentRasterToPolygons(img);
+        img.onerror = ()=> alert("Failed to load raster image.");
+        img.src = URL.createObjectURL(file);
       }
     });
 
-    // ===== Import / Export JSON（只存多边形和标签） =====
-    annotationFileInput.addEventListener("change", e => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = evt => {
-        try {
-          const json = JSON.parse(evt.target.result);
-          if (!json.roiPolygons || !json.roiCentroids) {
+    annotationFileInput.addEventListener("change",e=>{
+      const file=e.target.files[0];
+      if(!file) return;
+      const reader=new FileReader();
+      reader.onload = ev=>{
+        try{
+          const json = JSON.parse(ev.target.result);
+          if(!json.roiPolygons || !json.roiCentroids){
             alert("JSON does not contain vector ROI data.");
             return;
           }
-          imgWidth = json.imgWidth;
-          imgHeight = json.imgHeight;
-          roiPolygons = json.roiPolygons;
-          roiCentroids = json.roiCentroids;
-          roiCount = json.roiCount || Object.keys(roiPolygons).length;
-          labels = json.labels || [];
-          roiAssignments = json.roiAssignments || {};
-          activeLabelId = labels.length ? labels[0].id : null;
-
-          resizeCanvases(imgWidth, imgHeight);
+          imgWidth=json.imgWidth; imgHeight=json.imgHeight;
+          roiPolygons=json.roiPolygons;
+          roiCentroids=json.roiCentroids;
+          roiCount=json.roiCount || Object.keys(roiPolygons).length;
+          labels=json.labels || [];
+          roiAssignments=json.roiAssignments || {};
+          activeLabelId = labels.length? labels[0].id : null;
+          resizeCanvases(imgWidth,imgHeight);
           buildIdCanvas();
-          renderBase();
-          renderOverlay();
-          maskLoaded = true;
-          emptyState.style.display = "none";
-          hoverInfo.textContent = `Project loaded · ROIs: ${roiCount}`;
+          renderBase(); renderOverlay();
+          maskLoaded=true;
+          emptyState.style.display="none";
+          hoverInfo.textContent=`Project loaded · ROIs: ${roiCount}`;
           setMaskInfo("Project JSON loaded.");
           updateSelectionStatus("No ROI selected");
-        } catch(err) {
+        }catch(err){
           console.error(err);
           alert("Failed to parse JSON.");
         }
@@ -1302,251 +1084,190 @@
       reader.readAsText(file);
     });
 
-    exportJsonBtn.addEventListener("click", () => {
-      if (!maskLoaded || roiCount === 0) {
-        alert("Please load a template image or project first.");
-        return;
-      }
-      const obj = {
-        version: 5,
-        imgWidth,
-        imgHeight,
-        roiCount,
-        roiPolygons,
-        roiCentroids,
-        labels,
-        roiAssignments,
-        timestamp: new Date().toISOString(),
+    exportJsonBtn.addEventListener("click",()=>{
+      if(!maskLoaded || roiCount===0){alert("Please load a template image or project first.");return;}
+      const obj={
+        version: 5.1,
+        imgWidth,imgHeight,roiCount,
+        roiPolygons,roiCentroids,
+        labels,roiAssignments,
+        timestamp:new Date().toISOString()
       };
-      const blob = new Blob([JSON.stringify(obj, null, 2)], {type:"application/json"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "root_roi_project.json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement("a");
+      a.href=url; a.download="root_roi_project.json";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
 
-    exportPngBtn.addEventListener("click", () => {
-      if (!maskLoaded || roiCount === 0) {
-        alert("Please load a template image or project first.");
-        return;
-      }
-      maskCanvas.toBlob(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "root_roi_vector_map.png";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+    exportPngBtn.addEventListener("click",()=>{
+      if(!maskLoaded || roiCount===0){alert("Please load a template image or project first.");return;}
+      maskCanvas.toBlob(blob=>{
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");
+        a.href=url; a.download="root_roi_vector_map.png";
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
         URL.revokeObjectURL(url);
-      }, "image/png", 1.0);
+      },"image/png",1.0);
     });
 
-    // ===== Label operations =====
-    addLabelBtn.addEventListener("click", () => {
-      const name = labelNameInput.value.trim();
-      const color = labelColorInput.value || getNextColor();
-      addLabel(name, color);
-      labelNameInput.value = "";
-      renderBase();
-      renderOverlay();
+    // ---- label ----
+    addLabelBtn.addEventListener("click",()=>{
+      const name=labelNameInput.value.trim();
+      const color=labelColorInput.value || getNextColor();
+      addLabel(name,color);
+      labelNameInput.value="";
+      renderBase(); renderOverlay();
+    });
+    clearAllBtn.addEventListener("click",()=>{
+      labels=[]; roiAssignments={}; activeLabelId=null;
+      refreshLabelList(); updateGlobalStats();
+      renderBase(); renderOverlay();
     });
 
-    clearAllBtn.addEventListener("click", () => {
-      labels = [];
-      roiAssignments = {};
-      activeLabelId = null;
-      refreshLabelList();
-      updateGlobalStats();
-      renderBase();
-      renderOverlay();
-    });
+    // ---- modes ----
+    modeClickBtn.addEventListener("click",()=>setInteractionMode("click"));
+    modeBoxBtn.addEventListener("click",()=>setInteractionMode("box"));
+    modeMoveBtn.addEventListener("click",()=>setInteractionMode("move"));
 
-    // ===== Modes =====
-    modeClickBtn.addEventListener("click", () => setInteractionMode("click"));
-    modeBoxBtn.addEventListener("click", () => setInteractionMode("box"));
-    modeMoveBtn.addEventListener("click", () => setInteractionMode("move"));
-
-    // ===== Zoom & pan =====
-    canvasContainer.addEventListener("wheel", e => {
-      if (!maskLoaded) return;
+    // ---- zoom & pan ----
+    canvasContainer.addEventListener("wheel",e=>{
+      if(!maskLoaded) return;
       e.preventDefault();
-      const rect = canvasContainer.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      const oldScale = baseScale * viewScale;
-      const factor = e.deltaY > 0 ? 0.9 : 1.1;
-      let newViewScale = viewScale * factor;
-      if (newViewScale < minScale) newViewScale = minScale;
-      if (newViewScale > maxScale) newViewScale = maxScale;
-      const newScale = baseScale * newViewScale;
-
-      const tx = (rect.width - imgWidth * oldScale) / 2 + panX;
-      const ty = (rect.height - imgHeight * oldScale) / 2 + panY;
-      const imgX = (mouseX - tx) / oldScale;
-      const imgY = (mouseY - ty) / oldScale;
-
-      const newTx = mouseX - imgX * newScale;
-      const newTy = mouseY - imgY * newScale;
-
-      panX = newTx - (rect.width - imgWidth * newScale) / 2;
-      panY = newTy - (rect.height - imgHeight * newScale) / 2;
-      viewScale = newViewScale;
+      const rect=canvasContainer.getBoundingClientRect();
+      const mouseX=e.clientX-rect.left;
+      const mouseY=e.clientY-rect.top;
+      const oldScale=baseScale*viewScale;
+      const factor=e.deltaY>0?0.9:1.1;
+      let newViewScale=viewScale*factor;
+      newViewScale=Math.max(minScale,Math.min(maxScale,newViewScale));
+      const newScale=baseScale*newViewScale;
+      const tx=(rect.width-imgWidth*oldScale)/2+panX;
+      const ty=(rect.height-imgHeight*oldScale)/2+panY;
+      const imgX=(mouseX-tx)/oldScale;
+      const imgY=(mouseY-ty)/oldScale;
+      const newTx=mouseX-imgX*newScale;
+      const newTy=mouseY-imgY*newScale;
+      panX=newTx-(rect.width-imgWidth*newScale)/2;
+      panY=newTy-(rect.height-imgHeight*newScale)/2;
+      viewScale=newViewScale;
       updateViewTransform();
-    }, { passive: false });
+    },{passive:false});
 
-    canvasContainer.addEventListener("mousedown", e => {
-      if (!maskLoaded) return;
-      if (e.button !== 0) return;
-      if (interactionMode !== "move") return;
-      isPanning = true;
-      panStartClientX = e.clientX;
-      panStartClientY = e.clientY;
-      panStartX = panX;
-      panStartY = panY;
+    canvasContainer.addEventListener("mousedown",e=>{
+      if(!maskLoaded) return;
+      if(e.button!==0) return;
+      if(interactionMode!=="move") return;
+      isPanning=true;
+      panStartClientX=e.clientX;
+      panStartClientY=e.clientY;
+      panStartX=panX; panStartY=panY;
     });
-
-    window.addEventListener("mousemove", e => {
-      if (isPanning) {
-        const dx = e.clientX - panStartClientX;
-        const dy = e.clientY - panStartClientY;
-        panX = panStartX + dx;
-        panY = panStartY + dy;
+    window.addEventListener("mousemove",e=>{
+      if(isPanning){
+        const dx=e.clientX-panStartClientX;
+        const dy=e.clientY-panStartClientY;
+        panX=panStartX+dx;
+        panY=panStartY+dy;
         updateViewTransform();
       }
     });
-
-    window.addEventListener("mouseup", e => {
-      if (isPanning && e.button === 0) {
-        isPanning = false;
-      }
+    window.addEventListener("mouseup",e=>{
+      if(isPanning && e.button===0) isPanning=false;
     });
 
-    // ===== Click / box selection / hover =====
-    maskCanvas.addEventListener("mousemove", e => {
-      if (!maskLoaded || roiCount === 0) return;
-      const p = canvasPixelFromEvent(e);
-      if (!p) return;
-      const roiId = getRoiIdAt(p.x, p.y);
-      if (roiId === 0) {
-        hoverInfo.textContent = `Pos: (${p.x}, ${p.y}) · Background`;
-      } else {
-        const labelId = roiAssignments[roiId];
-        const labelName = labelId ? (labels.find(l => l.id === labelId)?.name || labelId) : "Unlabeled";
-        hoverInfo.textContent = `Pos: (${p.x}, ${p.y}) · ROI ID: ${roiId} · Label: ${labelName}`;
+    // ---- click / box / hover ----
+    maskCanvas.addEventListener("mousemove",e=>{
+      if(!maskLoaded || roiCount===0) return;
+      const p=canvasPixelFromEvent(e);
+      if(!p) return;
+      const id=getRoiIdAt(p.x,p.y);
+      if(id===0){
+        hoverInfo.textContent=`Pos: (${p.x}, ${p.y}) · Background`;
+      }else{
+        const labelId=roiAssignments[id];
+        const labelName=labelId?(labels.find(l=>l.id===labelId)?.name||labelId):"Unlabeled";
+        hoverInfo.textContent=`Pos: (${p.x}, ${p.y}) · ROI ID: ${id} · Label: ${labelName}`;
       }
-
-      if (roiId !== hoveredRoiId) {
-        hoveredRoiId = roiId;
-        hoverScaleTarget = roiId > 0 ? hoverScaleMax : 1.0;
+      if(id!==hoveredRoiId){
+        hoveredRoiId=id;
+        hoverScaleTarget = id>0? hoverScaleMax : 1.0;
       }
-
-      if (interactionMode === "box" && isDragging && dragStart) {
-        dragCurrent = p;
+      if(interactionMode==="box" && isDragging && dragStart){
+        dragCurrent=p;
       }
       renderOverlay();
     });
 
-    maskCanvas.addEventListener("mouseleave", () => {
-      if (!maskLoaded) return;
-      hoverInfo.textContent = "Mouse left ROI view";
-      hoveredRoiId = 0;
-      hoverScaleTarget = 1.0;
-      if (isDragging && interactionMode === "box") {
-        isDragging = false;
-        dragStart = null;
-        dragCurrent = null;
+    maskCanvas.addEventListener("mouseleave",()=>{
+      if(!maskLoaded) return;
+      hoverInfo.textContent="Mouse left ROI view";
+      hoveredRoiId=0; hoverScaleTarget=1.0;
+      if(isDragging && interactionMode==="box"){
+        isDragging=false; dragStart=null; dragCurrent=null;
       }
       renderOverlay();
     });
 
-    maskCanvas.addEventListener("mousedown", e => {
-      if (!maskLoaded || roiCount === 0) return;
-      if (e.button !== 0) return;
-      const p = canvasPixelFromEvent(e);
-      if (!p) return;
-
-      if (interactionMode === "click") {
-        const roiId = getRoiIdAt(p.x, p.y);
-        if (roiId === 0) {
+    maskCanvas.addEventListener("mousedown",e=>{
+      if(!maskLoaded || roiCount===0) return;
+      if(e.button!==0) return;
+      const p=canvasPixelFromEvent(e);
+      if(!p) return;
+      if(interactionMode==="click"){
+        const id=getRoiIdAt(p.x,p.y);
+        if(id===0){
           updateSelectionStatus("Clicked background (no ROI).");
-        } else {
-          applyLabelToSingleRoi(roiId);
-          renderBase();
-          renderOverlay();
-          const current = roiAssignments[roiId];
-          if (current) {
-            updateSelectionStatus(`ROI ${roiId} set to label ${current}.`);
-          } else {
-            updateSelectionStatus(`ROI ${roiId} cleared.`);
-          }
+        }else{
+          applyLabelToSingleRoi(id);
+          renderBase(); renderOverlay();
+          const cur=roiAssignments[id];
+          updateSelectionStatus(cur ? `ROI ${id} set to label ${cur}.` : `ROI ${id} cleared.`);
         }
-      } else if (interactionMode === "box") {
-        isDragging = true;
-        dragStart = p;
-        dragCurrent = p;
+      }else if(interactionMode==="box"){
+        isDragging=true;
+        dragStart=p; dragCurrent=p;
         renderOverlay();
       }
-      // move mode handled on container
     });
 
-    maskCanvas.addEventListener("mouseup", e => {
-      if (e.button !== 0) return;
-      if (!maskLoaded || roiCount === 0) return;
-      if (interactionMode !== "box") return;
-      if (!isDragging || !dragStart) return;
-
-      const p = canvasPixelFromEvent(e);
-      if (!p) {
-        isDragging = false;
-        dragStart = null;
-        dragCurrent = null;
-        renderOverlay();
-        return;
+    maskCanvas.addEventListener("mouseup",e=>{
+      if(e.button!==0) return;
+      if(!maskLoaded || roiCount===0) return;
+      if(interactionMode!=="box" || !isDragging || !dragStart) return;
+      const p=canvasPixelFromEvent(e);
+      if(!p){
+        isDragging=false; dragStart=null; dragCurrent=null;
+        renderOverlay(); return;
       }
-      dragCurrent = p;
-      const roiIds = getRoiIdsInRect(dragStart.x, dragStart.y, dragCurrent.x, dragCurrent.y);
-      applyLabelToRois(roiIds);
-
-      isDragging = false;
-      dragStart = null;
-      dragCurrent = null;
-
-      renderBase();
-      renderOverlay();
-      if (roiIds.length) {
-        updateSelectionStatus(`Box selection affected ${roiIds.length} ROIs.`);
-      } else {
-        updateSelectionStatus("No ROI in box selection.");
-      }
+      dragCurrent=p;
+      const ids=getRoiIdsInRect(dragStart.x,dragStart.y,dragCurrent.x,dragCurrent.y);
+      applyLabelToRois(ids);
+      isDragging=false; dragStart=null; dragCurrent=null;
+      renderBase(); renderOverlay();
+      updateSelectionStatus(ids.length? `Box selection affected ${ids.length} ROIs.` : "No ROI in box selection.");
     });
 
-    // ===== Resize + hover loop =====
-    window.addEventListener("resize", () => {
-      if (!maskLoaded) return;
-      computeBaseScale();
-      updateViewTransform();
+    window.addEventListener("resize",()=>{
+      if(!maskLoaded) return;
+      computeBaseScale(); updateViewTransform();
     });
 
-    function hoverAnimLoop() {
-      const dt = 1/60;
-      const diff = hoverScaleTarget - hoverScaleCurrent;
-      hoverScaleCurrent += diff * Math.min(1, hoverAnimSpeed*dt);
-      if (Math.abs(diff) < 0.001) hoverScaleCurrent = hoverScaleTarget;
+    function hoverAnimLoop(){
+      const dt=1/60;
+      const diff=hoverScaleTarget-hoverScaleCurrent;
+      hoverScaleCurrent += diff*Math.min(1,hoverAnimSpeed*dt);
+      if(Math.abs(diff)<0.001) hoverScaleCurrent=hoverScaleTarget;
       renderOverlay();
       requestAnimationFrame(hoverAnimLoop);
     }
 
-    (function init() {
+    (function init(){
       setInteractionMode("click");
       updateGlobalStats();
       refreshLabelList();
-      labelColorInput.value = getNextColor();
+      labelColorInput.value=getNextColor();
       hoverAnimLoop();
     })();
   </script>
