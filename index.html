@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Root ROI Map Annotator v2</title>
+  <title>Root ROI Map Annotator v3</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
@@ -360,13 +360,12 @@
 <body>
   <header>
     <div>
-      <h1>Root ROI Map Annotator v2</h1>
-      <span>Black-outline PNG/SVG → automatic ROI segmentation → labeling → JSON/PNG export</span>
+      <h1>Root ROI Map Annotator v3</h1>
+      <span>Black-outline PNG/SVG → automatic ROI segmentation → vector-like redraw + labeling → self-contained JSON/PNG export</span>
     </div>
     <div class="pill">
-      <span>Click mode: click ROIs</span>
-      <span>Box mode: drag rectangle</span>
-      <span>Move mode: drag canvas</span>
+      <span>Annotate: click = single ROI, drag = box</span>
+      <span>Move: drag canvas</span>
       <span>Wheel zoom: center at mouse</span>
     </div>
   </header>
@@ -384,32 +383,31 @@
           <input type="file" id="maskFileInput" accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml" />
           <div class="hint">
             Recommended: export your root PDF as a pure black-outline + white-background SVG or high-resolution PNG.
-            Dark pixels are treated as boundaries, white regions are segmented by connected components, and the largest
-            white region is treated as the outside background.
+            Dark pixels are treated as boundaries, white regions are segmented as ROIs. The largest outer white region is treated as background.
+            After segmentation, the original image is discarded; the map is fully redrawn per-ROI.
           </div>
           <div id="maskInfo" class="status-line"></div>
         </div>
 
         <div class="section">
-          <div class="section-title">2. Import / Export annotations</div>
+          <div class="section-title">2. Import / Export map</div>
           <div class="row">
-            <button class="button small primary" id="exportJsonBtn">Export annotations JSON</button>
+            <button class="button small primary" id="exportJsonBtn">Export map+annotations (JSON)</button>
             <button class="button small" id="exportPngBtn">Export colored PNG</button>
           </div>
-          <label for="annotationFileInput">Import annotations JSON</label>
+          <label for="annotationFileInput">Import map JSON</label>
           <input type="file" id="annotationFileInput" accept="application/json,.json" />
           <div class="hint">
-            JSON stores: label list (name + color), label assignment for each ROI, and image size.
-            Reload the same template image to restore annotations.
+            The JSON now contains the full ROI map (segmentation grid + labels) and can be reloaded without the original template image.
+            You can still load a template image first, then export a self-contained map.
           </div>
         </div>
 
         <div class="section">
           <div class="section-title">3. Interaction mode</div>
           <div class="row">
-            <button class="button small primary" id="modeClickBtn">Click mode</button>
-            <button class="button small" id="modeBoxBtn">Box mode</button>
-            <button class="button small" id="modeMoveBtn">Move mode</button>
+            <button class="button small primary" id="modeAnnotateBtn">Annotate</button>
+            <button class="button small" id="modeMoveBtn">Move</button>
           </div>
           <div id="modeStatus" class="status-line"></div>
         </div>
@@ -421,7 +419,9 @@
       <div class="panel-header">
         <div>
           <div class="panel-title">ROI Map View</div>
-          <div class="panel-subtitle">Automatically segmented ROIs. Supports click / box-select / move.</div>
+          <div class="panel-subtitle">
+            Automatically segmented ROIs, redrawn as clean regions with borders. Annotate by click or drag, move the map in Move mode.
+          </div>
         </div>
         <div id="hoverInfo" class="pill">No image loaded</div>
       </div>
@@ -429,11 +429,13 @@
         <canvas id="maskCanvas"></canvas>
         <canvas id="overlayCanvas"></canvas>
         <div id="emptyState" class="empty-state">
-          Please upload a root template image (PNG/JPEG/SVG, black outlines + white background) on the left.<br /><br />
+          Please upload a root template image (PNG/JPEG/SVG, black outlines + white background) on the left,<br/>
+          or import a previously exported map JSON.<br /><br />
           After loading, the tool will:<br />
-          · Automatically detect each closed white region as one ROI (non-closed internal regions are not separated)<br />
+          · Detect each closed white region as an ROI (non-closed internal gaps are not separated)<br />
           · Treat the largest outer white region as background and ignore it<br />
-          Then you can create labels and annotate ROIs.
+          · Redraw each ROI as a clean region with its own border (no original internal lines)<br />
+          You can then create labels and annotate ROIs.
         </div>
       </div>
     </section>
@@ -453,8 +455,9 @@
           <input type="color" id="labelColorInput" />
           <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">Add label</button>
           <div class="hint">
-            After creating a label, click it in the list to toggle it as the “current label” (click again to deselect).
-            When no label is active, clicking/box-selecting an ROI only clears its existing label (if any).
+            After creating a label, click it in the list to toggle it as the “active” label (click again to deactivate).
+            When no label is active, clicking/dragging only clears labels on selected ROIs.
+            Colors auto-advance through a default palette and will not repeat consecutively.
           </div>
         </div>
 
@@ -468,7 +471,7 @@
 
         <div class="section">
           <div class="section-title">3. Global stats</div>
-          <div id="globalStats" class="hint">No image loaded yet.</div>
+          <div id="globalStats" class="hint">No image or map loaded yet.</div>
         </div>
       </div>
     </aside>
@@ -496,8 +499,7 @@
     const selectionStatus = document.getElementById("selectionStatus");
     const modeStatus = document.getElementById("modeStatus");
 
-    const modeClickBtn = document.getElementById("modeClickBtn");
-    const modeBoxBtn = document.getElementById("modeBoxBtn");
+    const modeAnnotateBtn = document.getElementById("modeAnnotateBtn");
     const modeMoveBtn = document.getElementById("modeMoveBtn");
 
     const addLabelBtn = document.getElementById("addLabelBtn");
@@ -534,10 +536,15 @@
     let colorIndex = 0;
 
     // Interaction mode
-    let interactionMode = "click"; // "click" | "box" | "move"
-    let isDragging = false;        // for box selection
+    let interactionMode = "annotate"; // "annotate" | "move"
+
+    // Combined click + box selection (for annotate mode)
+    let mouseDown = false;
+    let mouseDownPos = null;
+    let isBoxSelecting = false;
     let dragStart = null;
     let dragCurrent = null;
+    const BOX_THRESHOLD = 3; // pixels
 
     // View transform (zoom & pan)
     let baseScale = 1;
@@ -588,22 +595,21 @@
     function setInteractionMode(mode) {
       interactionMode = mode;
 
-      modeClickBtn.classList.toggle("primary", mode === "click");
-      modeBoxBtn.classList.toggle("primary", mode === "box");
+      modeAnnotateBtn.classList.toggle("primary", mode === "annotate");
       modeMoveBtn.classList.toggle("primary", mode === "move");
 
-      if (mode === "click") {
-        modeStatus.innerHTML = "Mode: <strong>Click</strong>. Click an ROI to label/unlabel it according to the current label.";
-      } else if (mode === "box") {
-        modeStatus.innerHTML = "Mode: <strong>Box</strong>. Drag a rectangle to batch label/unlabel all ROIs inside.";
+      if (mode === "annotate") {
+        modeStatus.innerHTML =
+          "Mode: <strong>Annotate</strong>. Click = single ROI; drag = box selection. Box only selects/overwrites, no toggle-off.";
       } else {
-        modeStatus.innerHTML = "Mode: <strong>Move</strong>. Hold left mouse button to pan the view, use wheel to zoom at mouse.";
+        modeStatus.innerHTML =
+          "Mode: <strong>Move</strong>. Hold left mouse button to pan; use wheel to zoom at the mouse position.";
       }
     }
 
     function updateGlobalStats() {
       if (!maskLoaded || !roiLabelData) {
-        globalStats.textContent = "No image loaded yet.";
+        globalStats.textContent = "No image or map loaded yet.";
         return;
       }
       const used = new Set();
@@ -729,7 +735,7 @@
 
         item.addEventListener("click", () => {
           if (activeLabelId === label.id) {
-            activeLabelId = null; // clicking again toggles off
+            activeLabelId = null; // toggle off
           } else {
             activeLabelId = label.id;
           }
@@ -761,8 +767,77 @@
       labels.push({ id, name: name || `Label ${labels.length + 1}`, color });
       activeLabelId = id;
       refreshLabelList();
-      // next default color
+      // advance color picker
       labelColorInput.value = getNextColor();
+    }
+
+    // ===== RLE encode / decode for roiLabelData (to store full map in JSON) =====
+    function encodeRLE(arr) {
+      if (!arr || arr.length === 0) return [];
+      const out = [];
+      let currentVal = arr[0];
+      let runLength = 1;
+      for (let i = 1; i < arr.length; i++) {
+        const v = arr[i];
+        if (v === currentVal) {
+          runLength++;
+        } else {
+          out.push([currentVal, runLength]);
+          currentVal = v;
+          runLength = 1;
+        }
+      }
+      out.push([currentVal, runLength]);
+      return out;
+    }
+
+    function decodeRLE(rle, totalLength) {
+      const arr = new Uint16Array(totalLength);
+      let idx = 0;
+      for (const [val, len] of rle) {
+        for (let i = 0; i < len; i++) {
+          if (idx >= totalLength) break;
+          arr[idx++] = val;
+        }
+        if (idx >= totalLength) break;
+      }
+      return arr;
+    }
+
+    // ===== Build ROI geometry (pixel lists & centroids) from roiLabelData =====
+    function rebuildRoiFromLabelData() {
+      roiPixelMap = {};
+      roiCount = 0;
+      if (!roiLabelData) return;
+      const pixels = roiLabelData.length;
+      let maxId = 0;
+
+      for (let i = 0; i < pixels; i++) {
+        const id = roiLabelData[i];
+        if (id > maxId) maxId = id;
+        if (id > 0) {
+          const x = i % imgWidth;
+          const y = (i / imgWidth) | 0;
+          if (!roiPixelMap[id]) {
+            roiPixelMap[id] = { pixels: [], cx: 0, cy: 0 };
+          }
+          roiPixelMap[id].pixels.push({ x, y });
+        }
+      }
+      roiCount = maxId;
+
+      // compute centroid for each ROI
+      for (const [key, obj] of Object.entries(roiPixelMap)) {
+        const arr = obj.pixels;
+        let sx = 0, sy = 0;
+        for (const p of arr) {
+          sx += p.x;
+          sy += p.y;
+        }
+        const n = arr.length || 1;
+        obj.cx = sx / n;
+        obj.cy = sy / n;
+      }
     }
 
     // ===== Segmentation: dark pixels = boundary, white connected regions = ROIs =====
@@ -774,7 +849,7 @@
       const labelsArr = new Int32Array(pixels);
       const isBoundary = new Uint8Array(pixels);
 
-      // mark boundary pixels
+      // mark boundary pixels (dark lines)
       for (let i = 0; i < pixels; i++) {
         const r = data[i * 4];
         const g = data[i * 4 + 1];
@@ -798,7 +873,7 @@
         stack.push(idx);
       }
 
-      // 4-connected component labeling (on non-boundary pixels)
+      // 4-connected component labeling on non-boundary pixels
       for (let i = 0; i < pixels; i++) {
         if (isBoundary[i]) continue;
         if (labelsArr[i] !== 0) continue;
@@ -815,10 +890,11 @@
           if (x < imgWidth - 1) pushIfValid(idx + 1);
           if (y > 0) pushIfValid(idx - imgWidth);
           if (y < imgHeight - 1) pushIfValid(idx + imgWidth);
+          if (y < imgHeight - 1) pushIfValid(idx + imgWidth);
         }
       }
 
-      // find largest region → background
+      // find largest region → outside background
       const areas = new Array(currentLabel + 1).fill(0);
       for (let i = 0; i < pixels; i++) {
         const l = labelsArr[i];
@@ -846,44 +922,22 @@
       }
 
       roiLabelData = new Uint16Array(pixels);
-      roiCount = newId - 1;
-      roiPixelMap = {};
-
       for (let i = 0; i < pixels; i++) {
         const old = labelsArr[i];
-        const newVal = labelMap[old];
-        roiLabelData[i] = newVal;
-        if (newVal > 0) {
-          const x = i % imgWidth;
-          const y = (i / imgWidth) | 0;
-          if (!roiPixelMap[newVal]) {
-            roiPixelMap[newVal] = { pixels: [], cx: 0, cy: 0 };
-          }
-          roiPixelMap[newVal].pixels.push({ x, y });
-        }
+        roiLabelData[i] = labelMap[old];
       }
 
-      // compute centroid for each ROI
-      for (const [idStr, obj] of Object.entries(roiPixelMap)) {
-        const arr = obj.pixels;
-        let sx = 0, sy = 0;
-        for (const p of arr) {
-          sx += p.x;
-          sy += p.y;
-        }
-        const n = arr.length || 1;
-        obj.cx = sx / n;
-        obj.cy = sy / n;
-      }
+      // build per-ROI geometry
+      rebuildRoiFromLabelData();
 
       setMaskInfo(`Segmentation done: found ${roiCount} non-background ROIs (outer background removed).`);
       updateGlobalStats();
 
-      // clear original raster; from now on we fully redraw
+      // clear original raster; from now on we fully redraw per ROI
       ctx.clearRect(0, 0, imgWidth, imgHeight);
     }
 
-    // ===== Base map render (no hover/box) =====
+    // ===== Base map render (ROI fill + anti-aliased-ish borders), no hover/box =====
     function renderBase() {
       if (!maskLoaded || !roiLabelData) return;
 
@@ -893,8 +947,8 @@
 
       const bgR = 18, bgG = 24, bgB = 38;
 
-      for (let i = 0; i < total; i++) {
-        const roiId = roiLabelData[i];
+      for (let idx = 0; idx < total; idx++) {
+        const roiId = roiLabelData[idx];
         let r, g, b, a;
         if (roiId === 0) {
           r = bgR; g = bgG; b = bgB; a = 255;
@@ -912,10 +966,36 @@
             r = 120; g = 120; b = 120; a = 255;
           }
         }
-        data[i * 4] = r;
-        data[i * 4 + 1] = g;
-        data[i * 4 + 2] = b;
-        data[i * 4 + 3] = a;
+        data[idx * 4] = r;
+        data[idx * 4 + 1] = g;
+        data[idx * 4 + 2] = b;
+        data[idx * 4 + 3] = a;
+      }
+
+      // overlay borders by darkening boundary pixels
+      const w = imgWidth;
+      const h = imgHeight;
+      const darkerFactor = 0.65;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const idx = y * w + x;
+          const roiId = roiLabelData[idx];
+          if (roiId <= 0) continue;
+
+          let isBoundary = false;
+          // 4-neighborhood
+          if (x > 0 && roiLabelData[idx - 1] !== roiId) isBoundary = true;
+          else if (x < w - 1 && roiLabelData[idx + 1] !== roiId) isBoundary = true;
+          else if (y > 0 && roiLabelData[idx - w] !== roiId) isBoundary = true;
+          else if (y < h - 1 && roiLabelData[idx + w] !== roiId) isBoundary = true;
+
+          if (isBoundary) {
+            const di = idx * 4;
+            data[di] = data[di] * darkerFactor;
+            data[di + 1] = data[di + 1] * darkerFactor;
+            data[di + 2] = data[di + 2] * darkerFactor;
+          }
+        }
       }
 
       ctx.putImageData(imageData, 0, 0);
@@ -923,12 +1003,12 @@
       refreshLabelList();
     }
 
-    // ===== Overlay render (box selection + hover float) =====
+    // ===== Overlay render (box selection + hover float with border) =====
     function renderOverlay() {
       overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
-      // Box selection rectangle
-      if (isDragging && dragStart && dragCurrent && interactionMode === "box") {
+      // Box selection rectangle (in annotate mode only)
+      if (interactionMode === "annotate" && isBoxSelecting && dragStart && dragCurrent) {
         overlayCtx.save();
         overlayCtx.setLineDash([4, 3]);
         overlayCtx.lineWidth = 1.5;
@@ -945,26 +1025,49 @@
         overlayCtx.restore();
       }
 
-      // Hover float effect
+      // Hover float effect (slight scale + brighter fill + border)
       if (hoveredRoiId > 0 && roiPixelMap[hoveredRoiId]) {
         const obj = roiPixelMap[hoveredRoiId];
         const { pixels, cx, cy } = obj;
         const labelId = roiAssignments[hoveredRoiId];
-        let baseColor = "#ffffff";
+        let baseColor = "#d1d5db"; // light gray if no label
         if (labelId) {
           const label = labels.find(l => l.id === labelId);
-          baseColor = label ? label.color : "#ffffff";
+          baseColor = label ? label.color : baseColor;
         }
         const { r, g, b } = hexToRgb(baseColor);
-        overlayCtx.fillStyle = `rgba(${Math.min(r+40,255)},${Math.min(g+40,255)},${Math.min(b+40,255)},0.9)`;
-
         const s = hoverScaleCurrent;
+
+        // slightly brighter fill
+        overlayCtx.fillStyle = `rgba(${Math.min(r+40,255)},${Math.min(g+40,255)},${Math.min(b+40,255)},0.9)`;
         for (const p of pixels) {
           const dx = p.x - cx;
           const dy = p.y - cy;
           const nx = cx + dx * s;
           const ny = cy + dy * s;
           overlayCtx.fillRect(nx, ny, 1, 1);
+        }
+
+        // border line on top
+        overlayCtx.fillStyle = "rgba(15,23,42,0.95)";
+        const w = imgWidth;
+        for (const p of pixels) {
+          const x = p.x;
+          const y = p.y;
+          const idx = y * w + x;
+          let isBoundary = false;
+          if (x > 0 && roiLabelData[idx - 1] !== hoveredRoiId) isBoundary = true;
+          else if (x < imgWidth - 1 && roiLabelData[idx + 1] !== hoveredRoiId) isBoundary = true;
+          else if (y > 0 && roiLabelData[idx - imgWidth] !== hoveredRoiId) isBoundary = true;
+          else if (y < imgHeight - 1 && roiLabelData[idx + imgWidth] !== hoveredRoiId) isBoundary = true;
+
+          if (isBoundary) {
+            const dx = x - cx;
+            const dy = y - cy;
+            const nx = cx + dx * s;
+            const ny = cy + dy * s;
+            overlayCtx.fillRect(nx, ny, 1, 1);
+          }
         }
       }
     }
@@ -987,42 +1090,65 @@
       return roiLabelData[idx];
     }
 
-    function toggleOrAssignLabelForRoi(roiId) {
-      if (roiId <= 0) return;
+    // Single-click logic (toggle for same label, overwrite for others)
+    function handleClickAt(p) {
+      const roiId = getRoiIdAt(p.x, p.y);
+      if (roiId === 0) {
+        updateSelectionStatus("Clicked background (no ROI).");
+        return;
+      }
       const current = roiAssignments[roiId];
       if (activeLabelId) {
         if (current === activeLabelId) {
-          // same label → remove
+          // same label → clear
           delete roiAssignments[roiId];
+          updateSelectionStatus(`ROI ${roiId} label removed.`);
         } else {
-          // assign/overwrite with active label
+          // overwrite with active label
           roiAssignments[roiId] = activeLabelId;
+          updateSelectionStatus(`ROI ${roiId} set to label ${activeLabelId}.`);
         }
       } else {
-        // no active label: only remove if there is one
+        // no active label: only clear if labeled
         if (current) {
           delete roiAssignments[roiId];
+          updateSelectionStatus(`ROI ${roiId} label removed.`);
+        } else {
+          updateSelectionStatus(`ROI ${roiId} has no label and no active label is selected.`);
         }
       }
+      renderBase();
+      renderOverlay();
     }
 
-    function toggleOrAssignLabelForRoiBatch(roiIds) {
-      if (!roiIds.length) return;
-      roiIds.forEach(roiId => {
-        if (roiId <= 0) return;
-        const current = roiAssignments[roiId];
-        if (activeLabelId) {
-          if (current === activeLabelId) {
-            delete roiAssignments[roiId];
-          } else {
-            roiAssignments[roiId] = activeLabelId;
+    // Box selection logic (no toggle-off by reselect; only assign/overwrite, or clear if no active label)
+    function handleBoxSelection(p1, p2) {
+      const roiIds = getRoiIdsInRect(p1.x, p1.y, p2.x, p2.y);
+      if (!roiIds.length) {
+        updateSelectionStatus("No ROI in box selection.");
+        return;
+      }
+      if (activeLabelId) {
+        // assign/overwrite all to active label
+        roiIds.forEach(id => {
+          if (id > 0) roiAssignments[id] = activeLabelId;
+        });
+        updateSelectionStatus(
+          `Box selection: ${roiIds.length} ROIs set to label ${activeLabelId}.`
+        );
+      } else {
+        // no active label: clear labels in the box
+        roiIds.forEach(id => {
+          if (id > 0 && roiAssignments[id]) {
+            delete roiAssignments[id];
           }
-        } else {
-          if (current) {
-            delete roiAssignments[roiId];
-          }
-        }
-      });
+        });
+        updateSelectionStatus(
+          `Box selection: labels cleared for ${roiIds.length} ROIs (no active label).`
+        );
+      }
+      renderBase();
+      renderOverlay();
     }
 
     function getRoiIdsInRect(x1, y1, x2, y2) {
@@ -1048,7 +1174,7 @@
 
       const img = new Image();
       img.onload = () => {
-        // upscale small images slightly to get a more "vector-like" feel
+        // upsample small images slightly to get a more "vector-like" feel
         let targetWidth = img.width;
         let targetHeight = img.height;
         const maxDim = 2000;
@@ -1062,7 +1188,7 @@
         imgHeight = targetHeight;
         resizeCanvases(imgWidth, imgHeight);
 
-        // draw image for segmentation
+        // draw template for segmentation
         ctx.clearRect(0, 0, imgWidth, imgHeight);
         ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, imgWidth, imgHeight);
 
@@ -1071,11 +1197,11 @@
 
         // segmentation & redraw
         segmentImageToRois();
+        roiAssignments = {};
         renderBase();
         renderOverlay();
         hoverInfo.textContent = `Size: ${imgWidth} × ${imgHeight} · ~${roiCount} ROIs`;
         setMaskInfo(`Loaded: ${file.name} · ~${roiCount} ROIs`);
-        roiAssignments = {};
         updateSelectionStatus("No ROI selected");
       };
 
@@ -1087,7 +1213,7 @@
       img.src = url;
     });
 
-    // Import annotations JSON
+    // Import self-contained map JSON (geometry + labels)
     annotationFileInput.addEventListener("change", e => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1095,21 +1221,40 @@
       reader.onload = evt => {
         try {
           const json = JSON.parse(evt.target.result);
-          if (!json.labels || !json.roiAssignments) {
-            alert("Invalid JSON (missing 'labels' or 'roiAssignments').");
+          if (!json.labels || !json.roiAssignments || !json.imgWidth || !json.imgHeight) {
+            alert("Invalid JSON. Expected keys: imgWidth, imgHeight, labels, roiAssignments, roiRLE.");
             return;
           }
+
+          imgWidth = json.imgWidth;
+          imgHeight = json.imgHeight;
+          resizeCanvases(imgWidth, imgHeight);
+
+          if (json.roiRLE && Array.isArray(json.roiRLE)) {
+            const total = imgWidth * imgHeight;
+            roiLabelData = decodeRLE(json.roiRLE, total);
+            rebuildRoiFromLabelData();
+            maskLoaded = true;
+            emptyState.style.display = "none";
+          } else {
+            alert("This JSON does not contain ROI geometry (roiRLE). You may need to re-export with the new version.");
+            return;
+          }
+
           labels = json.labels;
-          roiAssignments = json.roiAssignments;
+          roiAssignments = json.roiAssignments || {};
           activeLabelId = labels.length ? labels[0].id : null;
-          refreshLabelList();
-          updateGlobalStats();
+
           renderBase();
           renderOverlay();
-          alert("Annotations imported. Make sure you loaded the same root template image.");
+          refreshLabelList();
+          updateGlobalStats();
+          hoverInfo.textContent = `Map loaded from JSON: ${imgWidth} × ${imgHeight} · ${roiCount} ROIs`;
+          setMaskInfo("Self-contained map JSON loaded.");
+          updateSelectionStatus("No ROI selected");
         } catch (err) {
           console.error(err);
-          alert("Failed to parse JSON. Please check that this is an annotation file exported from this tool.");
+          alert("Failed to parse JSON. Please check that this is a map file exported from this tool.");
         }
       };
       reader.readAsText(file);
@@ -1137,8 +1282,7 @@
     });
 
     // Mode switching
-    modeClickBtn.addEventListener("click", () => setInteractionMode("click"));
-    modeBoxBtn.addEventListener("click", () => setInteractionMode("box"));
+    modeAnnotateBtn.addEventListener("click", () => setInteractionMode("annotate"));
     modeMoveBtn.addEventListener("click", () => setInteractionMode("move"));
 
     // Wheel zoom (centered at mouse)
@@ -1198,7 +1342,7 @@
       }
     });
 
-    // Canvas hover + click/box
+    // Canvas hover + annotate (click/drag)
     maskCanvas.addEventListener("mousemove", e => {
       if (!maskLoaded || !roiLabelData) return;
       const p = canvasPixelFromEvent(e);
@@ -1220,9 +1364,19 @@
         hoverScaleTarget = roiId > 0 ? hoverScaleMax : 1.0;
       }
 
-      // Box selection drag
-      if (interactionMode === "box" && isDragging && dragStart) {
-        dragCurrent = p;
+      // Annotate mode: track drag to decide click vs box
+      if (interactionMode === "annotate" && mouseDown && mouseDownPos) {
+        const dx = p.x - mouseDownPos.x;
+        const dy = p.y - mouseDownPos.y;
+        const dist2 = dx * dx + dy * dy;
+        if (!isBoxSelecting && dist2 > BOX_THRESHOLD * BOX_THRESHOLD) {
+          // start box selection
+          isBoxSelecting = true;
+          dragStart = { ...mouseDownPos };
+          dragCurrent = p;
+        } else if (isBoxSelecting) {
+          dragCurrent = p;
+        }
       }
 
       renderOverlay();
@@ -1233,8 +1387,10 @@
       hoverInfo.textContent = "Mouse left ROI view";
       hoveredRoiId = 0;
       hoverScaleTarget = 1.0;
-      if (isDragging && interactionMode === "box") {
-        isDragging = false;
+      if (interactionMode === "annotate") {
+        mouseDown = false;
+        isBoxSelecting = false;
+        mouseDownPos = null;
         dragStart = null;
         dragCurrent = null;
       }
@@ -1247,78 +1403,63 @@
       const p = canvasPixelFromEvent(e);
       if (!p) return;
 
-      if (interactionMode === "click") {
-        const roiId = getRoiIdAt(p.x, p.y);
-        if (roiId === 0) {
-          updateSelectionStatus("Clicked background (no ROI).");
-        } else {
-          toggleOrAssignLabelForRoi(roiId);
-          renderBase();
-          renderOverlay();
-          const current = roiAssignments[roiId];
-          if (current) {
-            updateSelectionStatus(`ROI ${roiId} set to label ${current}.`);
-          } else {
-            updateSelectionStatus(`ROI ${roiId} label cleared.`);
-          }
-        }
-      } else if (interactionMode === "box") {
-        isDragging = true;
-        dragStart = p;
-        dragCurrent = p;
-        renderOverlay();
+      if (interactionMode === "annotate") {
+        mouseDown = true;
+        mouseDownPos = p;
+        isBoxSelecting = false;
+        dragStart = null;
+        dragCurrent = null;
       }
-      // Move mode drag is handled on canvasContainer
+      // move mode drag handled on canvasContainer
     });
 
     maskCanvas.addEventListener("mouseup", e => {
-      if (e.button !== 0) return;
       if (!maskLoaded || !roiLabelData) return;
-      if (interactionMode !== "box") return;
-      if (!isDragging || !dragStart) return;
+      if (e.button !== 0) return;
+      if (interactionMode !== "annotate") return;
+
       const p = canvasPixelFromEvent(e);
-      if (!p) {
-        isDragging = false;
+      const wasBox = isBoxSelecting && dragStart && dragCurrent;
+      const startPos = mouseDownPos;
+
+      mouseDown = false;
+      mouseDownPos = null;
+      isBoxSelecting = false;
+
+      if (!p || !startPos) {
         dragStart = null;
         dragCurrent = null;
         renderOverlay();
         return;
       }
-      dragCurrent = p;
 
-      const roiIds = getRoiIdsInRect(
-        dragStart.x, dragStart.y, dragCurrent.x, dragCurrent.y
-      );
-      toggleOrAssignLabelForRoiBatch(roiIds);
+      if (!wasBox) {
+        // treat as single click
+        handleClickAt(p);
+      } else {
+        // box selection
+        handleBoxSelection(dragStart, dragCurrent);
+      }
 
-      isDragging = false;
       dragStart = null;
       dragCurrent = null;
-
-      renderBase();
       renderOverlay();
-
-      if (roiIds.length) {
-        updateSelectionStatus(
-          `Box selection updated ${roiIds.length} ROIs according to current label logic.`
-        );
-      } else {
-        updateSelectionStatus("No ROI in box selection.");
-      }
     });
 
-    // Export JSON
+    // Export self-contained JSON
     exportJsonBtn.addEventListener("click", () => {
       if (!maskLoaded || !roiLabelData) {
-        alert("Please load a template image and run segmentation first.");
+        alert("Please load a template image or map JSON and run segmentation first.");
         return;
       }
+      const rle = encodeRLE(roiLabelData);
       const obj = {
-        version: 1,
+        version: 2,
         imgWidth,
         imgHeight,
         labels,
         roiAssignments,
+        roiRLE: rle,
         timestamp: new Date().toISOString(),
       };
       const blob = new Blob([JSON.stringify(obj, null, 2)], {
@@ -1327,17 +1468,17 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "root_roi_annotations.json";
+      a.download = "root_roi_map_and_annotations.json";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     });
 
-    // Export PNG
+    // Export colored PNG
     exportPngBtn.addEventListener("click", () => {
       if (!maskLoaded || !roiLabelData) {
-        alert("Please load a template image and run segmentation first.");
+        alert("Please load a template image or map JSON and run segmentation first.");
         return;
       }
       maskCanvas.toBlob(blob => {
@@ -1373,7 +1514,7 @@
 
     // Init
     (function init() {
-      setInteractionMode("click");
+      setInteractionMode("annotate");
       updateGlobalStats();
       refreshLabelList();
       labelColorInput.value = getNextColor();
