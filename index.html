@@ -325,8 +325,11 @@
     /* ROI：更深灰底色；hover 变白/淡色 + 粗线 + 强光晕 */
     .roi-shape {
       cursor: pointer;
-      transition: fill 0.12s ease-out, filter 0.12s ease-out, stroke-width 0.12s ease-out;
+      transition: fill 0.12s ease-out, filter 0.12s ease-out, stroke-width 0.12s ease-out, transform 0.12s ease-out;
       vector-effect: non-scaling-stroke;
+      transform-box: fill-box;
+      pointer-events: visiblePainted;
+      will-change: transform, filter, fill;
     }
     .roi-hover {
       filter: drop-shadow(0 0 7px rgba(148, 163, 184, 0.98));
@@ -574,10 +577,11 @@
   function computeBaseScale(){
     if (!svgWidth || !svgHeight) return;
     const rect = svgViewport.getBoundingClientRect();
+    const padding = 24; // keep some breathing room on all sides
     const contentWidth  = (roiBBox?.width  || svgWidth);
     const contentHeight = (roiBBox?.height || svgHeight);
-    const scaleByHeight = rect.height / (contentHeight * 1.2);
-    const scaleByWidth  = rect.width  / (contentWidth  * 1.2);
+    const scaleByHeight = (rect.height - padding * 2) / contentHeight;
+    const scaleByWidth  = (rect.width  - padding * 2) / contentWidth;
     baseScale = Math.min(scaleByWidth, scaleByHeight);
   }
 
@@ -784,8 +788,12 @@
       panY = 0;
 
       setupRoisFromSvg(svgEl);
-      computeBaseScale();
-      centerOnRoiBBox();
+
+      // ensure measurements use the latest layout
+      requestAnimationFrame(() => {
+        computeBaseScale();
+        centerOnRoiBBox();
+      });
 
       hoverInfo.textContent = "SVG loaded. Label mode: click or drag box. Move mode: drag to pan.";
     } catch (err) {
@@ -804,9 +812,6 @@
     roiElements = [];
     let autoIdCount = 1;
     paths.forEach(el => {
-      const styleAttr = el.getAttribute("style") || "";
-      if (styleAttr.includes("stroke:none")) return;
-
       const baseFill = "#c9d0d8"; // 更灰一点
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
@@ -822,7 +827,7 @@
 
       el.classList.add("roi-shape");
 
-      el.addEventListener("mouseenter", () => {
+      el.addEventListener("pointerenter", () => {
         el.classList.add("roi-hover");
         el.dataset.baseStrokeWidth = el.style.strokeWidth || "1.6";
         const roiId = el.id;
@@ -844,7 +849,7 @@
         hoverInfo.textContent = `ROI: ${roiId} · Label: ${labelName}`;
       });
 
-      el.addEventListener("mouseleave", () => {
+      el.addEventListener("pointerleave", () => {
         el.classList.remove("roi-hover");
         el.style.strokeWidth = el.dataset.baseStrokeWidth || "1.6";
         updateRoiAppearance(el); // 恢复为标签色或灰色
