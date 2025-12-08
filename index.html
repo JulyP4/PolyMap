@@ -564,6 +564,16 @@
     };
   }
 
+  function getContentMetrics(){
+    const hasBBox = roiBBox && isFinite(roiBBox.width) && isFinite(roiBBox.height) && roiBBox.width > 0 && roiBBox.height > 0;
+    return {
+      width: hasBBox ? roiBBox.width : svgWidth,
+      height: hasBBox ? roiBBox.height : svgHeight,
+      offsetX: hasBBox ? roiBBox.minX : 0,
+      offsetY: hasBBox ? roiBBox.minY : 0
+    };
+  }
+
   // ---------- 模式切换 ----------
   function setInteractionMode(mode){
     interactionMode = mode;
@@ -578,8 +588,7 @@
     if (!svgWidth || !svgHeight) return;
     const rect = svgViewport.getBoundingClientRect();
     const padding = 24; // keep some breathing room on all sides
-    const contentWidth  = (roiBBox?.width  || svgWidth);
-    const contentHeight = (roiBBox?.height || svgHeight);
+    const { width: contentWidth, height: contentHeight } = getContentMetrics();
     const scaleByHeight = (rect.height - padding * 2) / contentHeight;
     const scaleByWidth  = (rect.width  - padding * 2) / contentWidth;
     baseScale = Math.min(scaleByWidth, scaleByHeight);
@@ -588,16 +597,21 @@
   function updateSvgTransform(){
     if (!svgEl) return;
     const scale = baseScale * viewScale;
+    const { width, height, offsetX, offsetY } = getContentMetrics();
+    const rect = svgViewport.getBoundingClientRect();
+    const tx = (rect.width - width * scale) / 2 + panX - offsetX * scale;
+    const ty = (rect.height - height * scale) / 2 + panY - offsetY * scale;
     svgContainer.style.transformOrigin = "top left";
-    svgContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    svgContainer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   }
 
   function centerOnRoiBBox(){
     if (!roiElements.length || !roiBBox) return;
     const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-    const cx = (roiBBox.minX + roiBBox.maxX) / 2;
-    const cy = (roiBBox.minY + roiBBox.maxY) / 2;
+    const { width, height, offsetX, offsetY } = getContentMetrics();
+    const cx = offsetX + width / 2;
+    const cy = offsetY + height / 2;
 
     // 让 ROI 中心对齐到视口中心
     panX = rect.width / 2 - cx * scale;
@@ -608,8 +622,11 @@
   function clientToSvg(clientX, clientY){
     const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-    const x = (clientX - rect.left - panX) / scale;
-    const y = (clientY - rect.top - panY) / scale;
+    const { width, height, offsetX, offsetY } = getContentMetrics();
+    const tx = (rect.width - width * scale) / 2 + panX - offsetX * scale;
+    const ty = (rect.height - height * scale) / 2 + panY - offsetY * scale;
+    const x = (clientX - rect.left - tx) / scale;
+    const y = (clientY - rect.top - ty) / scale;
     return { x, y };
   }
 
@@ -625,12 +642,18 @@
     let newViewScale = viewScale * factor;
     newViewScale = Math.max(0.2, Math.min(6, newViewScale));
     const newScale = baseScale * newViewScale;
+    const { width, height, offsetX, offsetY } = getContentMetrics();
+    const txOld = (rect.width - width * oldScale) / 2 + panX - offsetX * oldScale;
+    const tyOld = (rect.height - height * oldScale) / 2 + panY - offsetY * oldScale;
 
-    const imgX = (mouseX - panX) / oldScale;
-    const imgY = (mouseY - panY) / oldScale;
+    const imgX = (mouseX - txOld) / oldScale;
+    const imgY = (mouseY - tyOld) / oldScale;
 
-    panX = mouseX - imgX * newScale;
-    panY = mouseY - imgY * newScale;
+    const txNew = mouseX - imgX * newScale;
+    const tyNew = mouseY - imgY * newScale;
+
+    panX = txNew - (rect.width - width * newScale) / 2 + offsetX * newScale;
+    panY = tyNew - (rect.height - height * newScale) / 2 + offsetY * newScale;
     viewScale = newViewScale;
     updateSvgTransform();
   }, { passive: false });
