@@ -219,7 +219,7 @@
       min-height: 0;
       border-radius: 0.7rem;
       border: 1px solid var(--border);
-      background: #020617;
+      background: #0d1320;
       position: relative;
       overflow: hidden;
       display: flex;
@@ -239,7 +239,7 @@
     }
     #svgContainer svg {
       display: block;
-      background: #020617;
+      background: #0c111b;
     }
 
     #boxOverlay {
@@ -330,6 +330,8 @@
     }
     .roi-hover {
       filter: drop-shadow(0 0 7px rgba(148, 163, 184, 0.98));
+      transform: scale(1.02);
+      transform-origin: center;
     }
   </style>
 </head>
@@ -392,8 +394,8 @@
           Each cell contour is a vector ROI path. Only fills are changed; strokes remain crisp and uniform.
         </div>
         <div style="margin-top:0.35rem; display:flex; gap:0.3rem;">
-          <button class="button small mode-active" id="modeLabelBtn">Label</button>
-          <button class="button small" id="modeMoveBtn">Move</button>
+          <button class="button small" id="modeLabelBtn">Label</button>
+          <button class="button small mode-active" id="modeMoveBtn">Move</button>
         </div>
       </div>
       <div id="hoverInfo" class="pill">Loading SVG…</div>
@@ -487,7 +489,7 @@
   let panMoved = false;
 
   // Label 模式：点击/框选
-  let interactionMode = "label"; // "label" | "move"
+  let interactionMode = "move"; // "label" | "move"
   let labelMouseDown = false;
   let labelStartClientX = 0, labelStartClientY = 0;
   let labelCurrentClientX = 0, labelCurrentClientY = 0;
@@ -581,12 +583,9 @@
 
   function updateSvgTransform(){
     if (!svgEl) return;
-    const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-    const tx = (rect.width - svgWidth * scale) / 2 + panX;
-    const ty = (rect.height - svgHeight * scale) / 2 + panY;
     svgContainer.style.transformOrigin = "top left";
-    svgContainer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+    svgContainer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
   }
 
   function centerOnRoiBBox(){
@@ -605,10 +604,8 @@
   function clientToSvg(clientX, clientY){
     const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-    const tx = (rect.width - svgWidth * scale) / 2 + panX;
-    const ty = (rect.height - svgHeight * scale) / 2 + panY;
-    const x = (clientX - rect.left - tx) / scale;
-    const y = (clientY - rect.top - ty) / scale;
+    const x = (clientX - rect.left - panX) / scale;
+    const y = (clientY - rect.top - panY) / scale;
     return { x, y };
   }
 
@@ -625,17 +622,11 @@
     newViewScale = Math.max(0.2, Math.min(6, newViewScale));
     const newScale = baseScale * newViewScale;
 
-    const txOld = (rect.width - svgWidth * oldScale) / 2 + panX;
-    const tyOld = (rect.height - svgHeight * oldScale) / 2 + panY;
+    const imgX = (mouseX - panX) / oldScale;
+    const imgY = (mouseY - panY) / oldScale;
 
-    const imgX = (mouseX - txOld) / oldScale;
-    const imgY = (mouseY - tyOld) / oldScale;
-
-    const txNew = mouseX - imgX * newScale;
-    const tyNew = mouseY - imgY * newScale;
-
-    panX = txNew - (rect.width - svgWidth * newScale) / 2;
-    panY = tyNew - (rect.height - svgHeight * newScale) / 2;
+    panX = mouseX - imgX * newScale;
+    panY = mouseY - imgY * newScale;
     viewScale = newViewScale;
     updateSvgTransform();
   }, { passive: false });
@@ -816,7 +807,7 @@
       const styleAttr = el.getAttribute("style") || "";
       if (styleAttr.includes("stroke:none")) return;
 
-      const baseFill = "#d1d5db"; // 更灰一点
+      const baseFill = "#c9d0d8"; // 更灰一点
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
       el.style.stroke = "#000000";
@@ -837,14 +828,14 @@
         const roiId = el.id;
         const labelId = roiAssignments[roiId];
         if (!labelId) {
-          const base = el.dataset.baseFill || "#d1d5db";
-          el.style.fill = lightenHex(base, 0.28); // 无标签：底色提亮
+          const base = el.dataset.baseFill || "#c9d0d8";
+          el.style.fill = lightenHex(base, 0.4); // 无标签：底色提亮
         } else {
           const label = labels.find(l => l.id === labelId);
           const c = label ? label.color : "#ffffff";
-          el.style.fill = lightenHex(c, 0.5); // 有标签：标签色 -> 淡色
+          el.style.fill = lightenHex(c, 0.6); // 有标签：标签色 -> 更明显的淡色
         }
-        el.style.strokeWidth = "2.3";
+        el.style.strokeWidth = "2.8";
 
         const currentLabelId = roiAssignments[roiId];
         const labelName = currentLabelId
@@ -905,14 +896,14 @@
     const roiId = el.id;
     const labelId = roiAssignments[roiId];
     if (!labelId) {
-      el.style.fill = el.dataset.baseFill || "#d1d5db";
+      el.style.fill = el.dataset.baseFill || "#c9d0d8";
       el.classList.remove("roi-labeled");
       return;
     }
     const label = labels.find(l => l.id === labelId);
     if (!label) {
       delete roiAssignments[roiId];
-      el.style.fill = el.dataset.baseFill || "#d1d5db";
+      el.style.fill = el.dataset.baseFill || "#c9d0d8";
       el.classList.remove("roi-labeled");
       return;
     }
@@ -1101,7 +1092,7 @@
     labelColorInput.value = getNextColor();
     refreshLabelList();
     updateGlobalStats();
-    setInteractionMode("label");
+    setInteractionMode("move");
     hoverInfo.textContent = "Loading SVG map…";
     loadSvgMap();
   })();
