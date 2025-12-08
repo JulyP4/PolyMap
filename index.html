@@ -322,14 +322,14 @@
       align-items: center;
     }
 
-    /* ROI：淡灰底色，粗细统一；hover 变白 + 粗线 + 强光晕 */
+    /* ROI：更深灰底色；hover 变白/淡色 + 粗线 + 强光晕 */
     .roi-shape {
       cursor: pointer;
       transition: fill 0.12s ease-out, filter 0.12s ease-out, stroke-width 0.12s ease-out;
       vector-effect: non-scaling-stroke;
     }
     .roi-hover {
-      filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.98));
+      filter: drop-shadow(0 0 7px rgba(148, 163, 184, 0.98));
     }
   </style>
 </head>
@@ -512,6 +512,14 @@
     const num = parseInt(hex,16);
     return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
   }
+  function lightenHex(hex, factor=0.6){
+    // factor: 0~1, 越大越接近白
+    const {r,g,b} = hexToRgb(hex);
+    const nr = Math.round(r + (255 - r) * factor);
+    const ng = Math.round(g + (255 - g) * factor);
+    const nb = Math.round(b + (255 - b) * factor);
+    return `rgb(${nr}, ${ng}, ${nb})`;
+  }
 
   function updateGlobalStats(){
     if (!roiElements.length) {
@@ -540,7 +548,6 @@
   function computeBaseScale(){
     if (!svgWidth || !svgHeight) return;
     const rect = svgViewport.getBoundingClientRect();
-    // 以高度为基准，但缩小 20%，初始留一些空隙
     const scaleByHeight = rect.height / (svgHeight * 1.2);
     const scaleByWidth  = rect.width  / (svgWidth  * 1.2);
     baseScale = Math.min(scaleByWidth, scaleByHeight);
@@ -554,6 +561,28 @@
     const ty = (rect.height - svgHeight * scale) / 2 + panY;
     svgContainer.style.transformOrigin = "top left";
     svgContainer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+
+  function centerOnRoiBBox(){
+    if (!roiElements.length) return;
+    const rect = svgViewport.getBoundingClientRect();
+    const scale = baseScale * viewScale;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    roiElements.forEach(el => {
+      const b = el.getBBox();
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.width);
+      maxY = Math.max(maxY, b.y + b.height);
+    });
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    // 让 ROI 中心对齐到视口中心
+    panX = -cx * scale + (svgWidth * scale) / 2;
+    panY = -cy * scale + (svgHeight * scale) / 2;
+    updateSvgTransform();
   }
 
   function clientToSvg(clientX, clientY){
@@ -596,7 +625,7 @@
 
   svgViewport.addEventListener("mousedown", (e) => {
     if (!svgEl) return;
-    if (e.button !== 0) return; // only left button
+    if (e.button !== 0) return;
 
     if (interactionMode === "move") {
       e.preventDefault();
@@ -608,7 +637,6 @@
       panStartClientX = e.clientX;
       panStartClientY = e.clientY;
     } else {
-      // label 模式：先假设是 click，如果移动超阈值则变成 box
       labelMouseDown = true;
       labelIsBox = false;
       labelBoxMoved = false;
@@ -663,7 +691,6 @@
     }
     if (labelMouseDown) {
       if (labelIsBox && labelBoxMoved) {
-        // 框选：阻止单击触发
         ignoreNextClick = true;
         performBoxSelection();
       }
@@ -691,18 +718,18 @@
 
     const affected = [];
     roiElements.forEach(el => {
-      const bbox = el.getBBox();
-      const cx = bbox.x + bbox.width / 2;
-      const cy = bbox.y + bbox.height / 2;
-      if (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) {
-        affected.push(el);
-      }
+      const b = el.getBBox();
+      const bx1 = b.x;
+      const by1 = b.y;
+      const bx2 = b.x + b.width;
+      const by2 = b.y + b.height;
+      const overlap = !(bx2 < minX || bx1 > maxX || by2 < minY || by1 > maxY);
+      if (overlap) affected.push(el);
     });
 
     affected.forEach(el => {
       const roiId = el.id;
       if (activeLabelId) {
-        // Box：只做“设定/覆盖”，不再 toggle
         roiAssignments[roiId] = activeLabelId;
       } else {
         delete roiAssignments[roiId];
@@ -721,7 +748,7 @@
   window.addEventListener("resize", () => {
     if (!svgEl) return;
     computeBaseScale();
-    updateSvgTransform();
+    centerOnRoiBBox();
   });
 
   // ----------- SVG 加载 & ROI 初始化 -----------
@@ -759,9 +786,10 @@
       viewScale = 1;
       panX = 0;
       panY = 0;
-      updateSvgTransform();
 
       setupRoisFromSvg(svgEl);
+      centerOnRoiBBox();
+
       hoverInfo.textContent = "SVG loaded. Label mode: click or drag box. Move mode: drag to pan.";
     } catch (err) {
       console.error(err);
@@ -782,8 +810,7 @@
       const styleAttr = el.getAttribute("style") || "";
       if (styleAttr.includes("stroke:none")) return;
 
-      // 淡灰底色 + 统一描边
-      const baseFill = "#e5e7eb";
+      const baseFill = "#d1d5db"; // 更灰一点
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
       el.style.stroke = "#000000";
@@ -801,31 +828,37 @@
       el.addEventListener("mouseenter", () => {
         el.classList.add("roi-hover");
         el.dataset.baseStrokeWidth = el.style.strokeWidth || "1.6";
-        el.dataset.prevFill = el.style.fill || baseFill;
-        el.style.strokeWidth = "2.3";
-        el.style.fill = "#ffffff";  // 上浮时变白
         const roiId = el.id;
+        const labelId = roiAssignments[roiId];
+        if (!labelId) {
+          el.style.fill = "#ffffff"; // 无标签：灰 -> 白
+        } else {
+          const label = labels.find(l => l.id === labelId);
+          const c = label ? label.color : "#ffffff";
+          el.style.fill = lightenHex(c, 0.7); // 有标签：标签色 -> 淡色
+        }
+        el.style.strokeWidth = "2.3";
+
         const currentLabelId = roiAssignments[roiId];
         const labelName = currentLabelId
           ? (labels.find(l => l.id === currentLabelId)?.name || currentLabelId)
           : "Unlabeled";
         hoverInfo.textContent = `ROI: ${roiId} · Label: ${labelName}`;
       });
+
       el.addEventListener("mouseleave", () => {
         el.classList.remove("roi-hover");
         el.style.strokeWidth = el.dataset.baseStrokeWidth || "1.6";
-        // 恢复为标签颜色或底色
-        updateRoiAppearance(el);
+        updateRoiAppearance(el); // 恢复为标签色或灰色
         hoverInfo.textContent = "Hover a cell to see ROI id and label.";
       });
+
       el.addEventListener("click", () => {
-        // 如果刚才是 box 操作，就忽略单击事件
         if (ignoreNextClick) {
           ignoreNextClick = false;
           return;
         }
         if (interactionMode === "move") {
-          // Move 模式下不标记
           return;
         }
         applyLabelLogicForRoi(el.id);
@@ -851,7 +884,6 @@
     const current = roiAssignments[roiId] || null;
     if (activeLabelId) {
       if (current === activeLabelId) {
-        // 再次点击同一标签 → 取消
         delete roiAssignments[roiId];
       } else {
         roiAssignments[roiId] = activeLabelId;
@@ -865,19 +897,19 @@
     const roiId = el.id;
     const labelId = roiAssignments[roiId];
     if (!labelId) {
-      el.style.fill = el.dataset.baseFill || "#e5e7eb";
+      el.style.fill = el.dataset.baseFill || "#d1d5db";
       el.classList.remove("roi-labeled");
       return;
     }
     const label = labels.find(l => l.id === labelId);
     if (!label) {
       delete roiAssignments[roiId];
-      el.style.fill = el.dataset.baseFill || "#e5e7eb";
+      el.style.fill = el.dataset.baseFill || "#d1d5db";
       el.classList.remove("roi-labeled");
       return;
     }
     const {r,g,b} = hexToRgb(label.color);
-    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.85)`;  // 接近原色的高透明度
+    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.85)`;
     el.classList.add("roi-labeled");
   }
 
@@ -969,7 +1001,7 @@
       return;
     }
     const obj = {
-      version: 3,
+      version: 4,
       mapFile: SVG_FILENAME,
       labels,
       assignments: roiAssignments,
