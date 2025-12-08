@@ -208,6 +208,7 @@
       margin-top: 0.25rem;
     }
 
+    /* SVG 视区：我们自己做缩放/平移，不用滚动条 */
     #svgViewport {
       flex: 1;
       min-height: 0;
@@ -215,25 +216,25 @@
       border: 1px solid var(--border);
       background: #020617;
       position: relative;
-      overflow: auto;
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 0.5rem;
+      padding: 0;
+      cursor: grab;
     }
-
-    #svgContainer svg {
-      max-width: 100%;
-      max-height: 100%;
-      width: auto;
-      height: auto;
-      display: block;
-      background: #020617;
+    #svgViewport.grabbing {
+      cursor: grabbing;
     }
 
     #svgContainer {
       position: relative;
       display: inline-block;
+      transform-origin: top left;
+    }
+    #svgContainer svg {
+      display: block;
+      background: #020617;
     }
 
     .empty-state {
@@ -307,22 +308,21 @@
       align-items: center;
     }
 
-    /* ROI 样式：纯 SVG 交互 */
+    /* ROI 样式：不再做 scale，避免错位，只做颜色 + 轻微描边高亮 */
     .roi-shape {
       cursor: pointer;
-      transition: transform 0.12s ease-out, fill 0.12s ease-out, stroke-width 0.12s ease-out;
-      transform-box: fill-box;
-      transform-origin: center;
+      transition: fill 0.12s ease-out, stroke-width 0.12s ease-out, filter 0.12s ease-out;
       vector-effect: non-scaling-stroke;
+      stroke: #000000;
+      stroke-width: 1.0;
     }
     .roi-hover {
-      transform: scale(1.05);
-      stroke-width: 1.4px;
+      stroke-width: 1.6px;
+      filter: drop-shadow(0 0 2px rgba(148, 163, 184, 0.9));
     }
     .roi-labeled {
-      /* 这里只是一个标记类，实际颜色用 style.fill 控制 */
+      /* 颜色在 JS 里用 style.fill 设置 */
     }
-
   </style>
 </head>
 <body>
@@ -332,13 +332,14 @@
     <span>Directly use the root SVG as a high-resolution map and add labels.</span>
   </div>
   <div class="pill">
+    <span>Wheel: zoom at mouse</span>
+    <span>Drag: move map</span>
     <span>Click ROI: toggle / set label</span>
-    <span>Active label → colored fill</span>
   </div>
 </header>
 
 <main>
-  <!-- 左侧：文件与导入导出 -->
+  <!-- 左侧：项目 & 导入导出 -->
   <aside class="panel">
     <div class="panel-header">
       <div class="panel-title">Map & Project</div>
@@ -374,7 +375,7 @@
     </div>
   </aside>
 
-  <!-- 中间：SVG 视图 -->
+  <!-- 中间：SVG 视图区 -->
   <section class="panel">
     <div class="panel-header">
       <div>
@@ -409,8 +410,9 @@
         <input type="color" id="labelColorInput" />
         <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">Add label</button>
         <div class="hint">
-          Select an active label, then click ROIs on the map to assign / overwrite it.<br/>
-          No active label: clicking ROIs will clear their labels.
+          Active label selected → click ROIs to set/overwrite that label.<br/>
+          If a ROI already has the active label, clicking again will clear it.<br/>
+          No active label: clicking ROIs clears labels.
         </div>
       </div>
 
@@ -429,38 +431,47 @@
 </footer>
 
 <script>
-  // ---------- basic state ----------
-  const svgContainer = document.getElementById("svgContainer");
-  const emptyState   = document.getElementById("emptyState");
-  const hoverInfo    = document.getElementById("hoverInfo");
-  const mapInfo      = document.getElementById("mapInfo");
-  const globalStats  = document.getElementById("globalStats");
+  // ----------- 基本状态 -----------
+  const svgViewport     = document.getElementById("svgViewport");
+  const svgContainer    = document.getElementById("svgContainer");
+  const emptyState      = document.getElementById("emptyState");
+  const hoverInfo       = document.getElementById("hoverInfo");
+  const mapInfo         = document.getElementById("mapInfo");
+  const globalStats     = document.getElementById("globalStats");
   const selectionStatus = document.getElementById("selectionStatus");
 
   const exportJsonBtn       = document.getElementById("exportJsonBtn");
   const labelsFileInput     = document.getElementById("labelsFileInput");
   const clearAssignmentsBtn = document.getElementById("clearAssignmentsBtn");
 
-  const addLabelBtn      = document.getElementById("addLabelBtn");
-  const labelNameInput   = document.getElementById("labelNameInput");
-  const labelColorInput  = document.getElementById("labelColorInput");
-  const labelListEl      = document.getElementById("labelList");
-  const labelEmptyHint   = document.getElementById("labelEmptyHint");
-  const clearAllLabelsBtn= document.getElementById("clearAllLabelsBtn");
+  const addLabelBtn       = document.getElementById("addLabelBtn");
+  const labelNameInput    = document.getElementById("labelNameInput");
+  const labelColorInput   = document.getElementById("labelColorInput");
+  const labelListEl       = document.getElementById("labelList");
+  const labelEmptyHint    = document.getElementById("labelEmptyHint");
+  const clearAllLabelsBtn = document.getElementById("clearAllLabelsBtn");
 
   const defaultColors = ["#ef4444","#f97316","#facc15","#22c55e","#14b8a6",
                          "#0ea5e9","#6366f1","#8b5cf6","#ec4899","#f97373"];
   let colorIndex = 0;
 
-  // 所有 ROI（SVG path 元素）
-  let roiElements = [];  // array of SVGElement
-  // 标签定义
-  let labels = [];       // [{id, name, color}]
-  let activeLabelId = null;
-  // ROI -> labelId 映射，key 用 ROI 的原始 id（例如 path23）
-  let roiAssignments = {};
+  const SVG_FILENAME = "Vector image_ blank root.svg";
 
-  const SVG_FILENAME = "Vector image_ blank root.svg"; // 方便以后扩展多 map
+  let svgEl = null;
+  let svgWidth = 0, svgHeight = 0;
+  let baseScale = 1, viewScale = 1;
+  let panX = 0, panY = 0;
+
+  let isPanning = false;
+  let panStartX = 0, panStartY = 0;
+  let panStartClientX = 0, panStartClientY = 0;
+  let panMoved = false;
+
+  // ROI & 标签
+  let roiElements = [];      // SVG path elements
+  let labels = [];           // [{id, name, color}]
+  let activeLabelId = null;
+  let roiAssignments = {};   // { roiId: labelId }
 
   function getNextColor(){
     const c = defaultColors[colorIndex % defaultColors.length];
@@ -469,9 +480,7 @@
   }
   function hexToRgb(hex){
     hex = hex.replace("#","");
-    if (hex.length === 3) {
-      hex = hex.split("").map(c => c + c).join("");
-    }
+    if (hex.length === 3) hex = hex.split("").map(c => c + c).join("");
     const num = parseInt(hex,16);
     return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
   }
@@ -490,24 +499,127 @@
     selectionStatus.textContent = text || "No ROI selected";
   }
 
-  // ---------- SVG 加载 & ROI 初始化 ----------
+  // ----------- SVG 缩放 / 平移 -----------
+  function computeBaseScale(){
+    if (!svgWidth || !svgHeight) return;
+    const rect = svgViewport.getBoundingClientRect();
+    baseScale = Math.min(rect.width / svgWidth, rect.height / svgHeight);
+  }
+
+  function updateSvgTransform(){
+    if (!svgEl) return;
+    const rect = svgViewport.getBoundingClientRect();
+    const scale = baseScale * viewScale;
+    const tx = (rect.width - svgWidth * scale) / 2 + panX;
+    const ty = (rect.height - svgHeight * scale) / 2 + panY;
+    svgContainer.style.transformOrigin = "top left";
+    svgContainer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  }
+
+  svgViewport.addEventListener("wheel", (e) => {
+    if (!svgEl) return;
+    e.preventDefault();
+    const rect = svgViewport.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const oldScale = baseScale * viewScale;
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    let newViewScale = viewScale * factor;
+    newViewScale = Math.max(0.2, Math.min(6, newViewScale));
+    const newScale = baseScale * newViewScale;
+
+    const txOld = (rect.width - svgWidth * oldScale) / 2 + panX;
+    const tyOld = (rect.height - svgHeight * oldScale) / 2 + panY;
+
+    const imgX = (mouseX - txOld) / oldScale;
+    const imgY = (mouseY - tyOld) / oldScale;
+
+    const txNew = mouseX - imgX * newScale;
+    const tyNew = mouseY - imgY * newScale;
+
+    panX = txNew - (rect.width - svgWidth * newScale) / 2;
+    panY = tyNew - (rect.height - svgHeight * newScale) / 2;
+    viewScale = newViewScale;
+    updateSvgTransform();
+  }, { passive: false });
+
+  svgViewport.addEventListener("mousedown", (e) => {
+    if (!svgEl) return;
+    if (e.button !== 0) return;  // 只用左键
+    e.preventDefault();
+    isPanning = true;
+    panMoved = false;
+    svgViewport.classList.add("grabbing");
+    panStartX = panX;
+    panStartY = panY;
+    panStartClientX = e.clientX;
+    panStartClientY = e.clientY;
+  });
+
+  window.addEventListener("mousemove", (e) => {
+    if (!isPanning) return;
+    const dx = e.clientX - panStartClientX;
+    const dy = e.clientY - panStartClientY;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) panMoved = true;
+    panX = panStartX + dx;
+    panY = panStartY + dy;
+    updateSvgTransform();
+  });
+
+  window.addEventListener("mouseup", (e) => {
+    if (e.button !== 0) return;
+    if (!isPanning) return;
+    isPanning = false;
+    svgViewport.classList.remove("grabbing");
+    // 不在这里处理 click，click 在 ROI 上单独判断 panMoved
+  });
+
+  window.addEventListener("resize", () => {
+    if (!svgEl) return;
+    computeBaseScale();
+    updateSvgTransform();
+  });
+
+  // ----------- SVG 加载 & ROI 初始化 -----------
   async function loadSvgMap(){
     try {
       const resp = await fetch(SVG_FILENAME);
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const svgText = await resp.text();
       svgContainer.innerHTML = svgText;
-      const svgEl = svgContainer.querySelector("svg");
+      svgEl = svgContainer.querySelector("svg");
       if (!svgEl) {
         emptyState.textContent = "Failed to load SVG: no <svg> root found.";
         hoverInfo.textContent = "SVG load error";
         return;
       }
       emptyState.style.display = "none";
-      hoverInfo.textContent = "SVG loaded. Hover / click cells to view / label.";
-      mapInfo.textContent = `Map file: ${SVG_FILENAME} · viewBox: ${svgEl.getAttribute("viewBox") || "none"}`;
+
+      // 读取 viewBox 决定几何尺寸
+      const vbAttr = svgEl.getAttribute("viewBox");
+      if (vbAttr) {
+        const parts = vbAttr.split(/[\s,]+/).map(parseFloat);
+        svgWidth  = parts[2];
+        svgHeight = parts[3];
+      } else {
+        const bbox = svgEl.getBBox();
+        svgWidth  = bbox.width;
+        svgHeight = bbox.height;
+      }
+      svgEl.setAttribute("width", svgWidth);
+      svgEl.setAttribute("height", svgHeight);
+
+      mapInfo.textContent = `Map file: ${SVG_FILENAME} · viewBox: ${svgEl.getAttribute("viewBox") || "none"} · W×H: ${svgWidth.toFixed(1)} × ${svgHeight.toFixed(1)}`;
+
+      computeBaseScale();
+      viewScale = 1;
+      panX = 0;
+      panY = 0;
+      updateSvgTransform();
 
       setupRoisFromSvg(svgEl);
+      hoverInfo.textContent = "SVG loaded. Scroll to zoom, drag to move, click cells to label.";
     } catch (err) {
       console.error(err);
       emptyState.textContent = "Failed to load SVG file.";
@@ -516,33 +628,27 @@
   }
 
   function setupRoisFromSvg(svgEl){
-    // 只在主图层里找 path，避免 <defs> / clipPath
     let paths = svgEl.querySelectorAll("g#layer-MC0 path, g[id^='layer'] path");
     if (!paths.length) {
-      // 回退：所有可见 path
       paths = svgEl.querySelectorAll("path");
     }
 
     roiElements = [];
     let autoIdCount = 1;
     paths.forEach(el => {
-      // 粗略过滤：stroke 不能是 none
       const styleAttr = el.getAttribute("style") || "";
       if (styleAttr.includes("stroke:none")) return;
 
-      // 记录原始 fill，统一内部用白色做”空 map“
       const computedFill = (styleAttr.match(/fill:([^;]+)/)?.[1] || "#ffffff").trim();
-      el.dataset.baseFill = computedFill.toLowerCase() === "none" ? "#ffffff" : computedFill;
+      el.dataset.baseFill = (computedFill.toLowerCase() === "none" ? "#ffffff" : computedFill);
 
       if (!el.id || el.id === "") {
         el.id = "roi_auto_" + autoIdCount++;
       }
-      el.classList.add("roi-shape");
 
-      // 初始状态：未标注 → baseFill
+      el.classList.add("roi-shape");
       el.style.fill = el.dataset.baseFill;
 
-      // 交互
       el.addEventListener("mouseenter", () => {
         el.classList.add("roi-hover");
         const roiId = el.id;
@@ -555,16 +661,29 @@
         hoverInfo.textContent = "Hover a cell to see ROI id and label.";
       });
       el.addEventListener("click", () => {
+        // 如果刚刚是在拖动画布，就不打标签
+        if (panMoved) return;
+
         const roiId = el.id;
+        const current = roiAssignments[roiId] || null;
+
         if (activeLabelId) {
-          roiAssignments[roiId] = activeLabelId;
+          if (current === activeLabelId) {
+            // 再次点击相同标签 → 取消
+            delete roiAssignments[roiId];
+          } else {
+            roiAssignments[roiId] = activeLabelId;
+          }
         } else {
+          // 没有激活标签 → 清除
           delete roiAssignments[roiId];
         }
+
         updateRoiAppearance(el);
-        const currentLabelId = roiAssignments[roiId];
-        if (currentLabelId) {
-          const ln = labels.find(l => l.id === currentLabelId)?.name || currentLabelId;
+
+        const now = roiAssignments[roiId] || null;
+        if (now) {
+          const ln = labels.find(l => l.id === now)?.name || now;
           updateSelectionStatus(`ROI ${roiId} set to label ${ln}.`);
         } else {
           updateSelectionStatus(`ROI ${roiId} cleared.`);
@@ -594,7 +713,7 @@
       return;
     }
     const {r,g,b} = hexToRgb(label.color);
-    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.4)`;  // 柔和半透明填充
+    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.4)`;
     el.classList.add("roi-labeled");
   }
 
@@ -602,7 +721,7 @@
     roiElements.forEach(updateRoiAppearance);
   }
 
-  // ---------- 标签管理 ----------
+  // ----------- 标签管理 -----------
   function refreshLabelList(){
     labelListEl.innerHTML = "";
     if (!labels.length) {
@@ -679,7 +798,7 @@
     updateGlobalStats();
   }
 
-  // ---------- 导入 / 导出 ----------
+  // ----------- 导入 / 导出 -----------
   function exportLabels(){
     if (!roiElements.length) {
       alert("SVG map is not loaded yet.");
@@ -710,8 +829,8 @@
     }
     if (obj.mapFile && obj.mapFile !== SVG_FILENAME) {
       const proceed = confirm(
-        `This JSON was exported for "${obj.mapFile}", but current map is "${SVG_FILENAME}".\n` +
-        `Continue to apply labels anyway?`
+        `JSON was exported for "${obj.mapFile}", but current map is "${SVG_FILENAME}".\n` +
+        `Continue to apply labels?`
       );
       if (!proceed) return;
     }
@@ -723,7 +842,6 @@
     updateGlobalStats();
   }
 
-  // ---------- 按钮事件 ----------
   exportJsonBtn.addEventListener("click", exportLabels);
 
   labelsFileInput.addEventListener("change", (e) => {
@@ -775,7 +893,7 @@
     updateGlobalStats();
   });
 
-  // ---------- 初始化 ----------
+  // ----------- 初始化 -----------
   (function init(){
     labelColorInput.value = getNextColor();
     refreshLabelList();
