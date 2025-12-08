@@ -219,7 +219,7 @@
       min-height: 0;
       border-radius: 0.7rem;
       border: 1px solid var(--border);
-      background: #0d1320;
+      background: #020617;
       position: relative;
       overflow: hidden;
       display: flex;
@@ -239,7 +239,7 @@
     }
     #svgContainer svg {
       display: block;
-      background: #0c111b;
+      background: #020617;
     }
 
     #boxOverlay {
@@ -325,16 +325,11 @@
     /* ROI：更深灰底色；hover 变白/淡色 + 粗线 + 强光晕 */
     .roi-shape {
       cursor: pointer;
-      transition: fill 0.12s ease-out, filter 0.12s ease-out, stroke-width 0.12s ease-out, transform 0.12s ease-out;
+      transition: fill 0.12s ease-out, filter 0.12s ease-out, stroke-width 0.12s ease-out;
       vector-effect: non-scaling-stroke;
-      transform-box: fill-box;
-      pointer-events: visiblePainted;
-      will-change: transform, filter, fill;
     }
     .roi-hover {
       filter: drop-shadow(0 0 7px rgba(148, 163, 184, 0.98));
-      transform: scale(1.02);
-      transform-origin: center;
     }
   </style>
 </head>
@@ -397,8 +392,8 @@
           Each cell contour is a vector ROI path. Only fills are changed; strokes remain crisp and uniform.
         </div>
         <div style="margin-top:0.35rem; display:flex; gap:0.3rem;">
-          <button class="button small" id="modeLabelBtn">Label</button>
-          <button class="button small mode-active" id="modeMoveBtn">Move</button>
+          <button class="button small mode-active" id="modeLabelBtn">Label</button>
+          <button class="button small" id="modeMoveBtn">Move</button>
         </div>
       </div>
       <div id="hoverInfo" class="pill">Loading SVG…</div>
@@ -492,7 +487,7 @@
   let panMoved = false;
 
   // Label 模式：点击/框选
-  let interactionMode = "move"; // "label" | "move"
+  let interactionMode = "label"; // "label" | "move"
   let labelMouseDown = false;
   let labelStartClientX = 0, labelStartClientY = 0;
   let labelCurrentClientX = 0, labelCurrentClientY = 0;
@@ -564,16 +559,6 @@
     };
   }
 
-  function getContentMetrics(){
-    const hasBBox = roiBBox && isFinite(roiBBox.width) && isFinite(roiBBox.height) && roiBBox.width > 0 && roiBBox.height > 0;
-    return {
-      width: hasBBox ? roiBBox.width : svgWidth,
-      height: hasBBox ? roiBBox.height : svgHeight,
-      offsetX: hasBBox ? roiBBox.minX : 0,
-      offsetY: hasBBox ? roiBBox.minY : 0
-    };
-  }
-
   // ---------- 模式切换 ----------
   function setInteractionMode(mode){
     interactionMode = mode;
@@ -587,20 +572,19 @@
   function computeBaseScale(){
     if (!svgWidth || !svgHeight) return;
     const rect = svgViewport.getBoundingClientRect();
-    const padding = 24; // keep some breathing room on all sides
-    const { width: contentWidth, height: contentHeight } = getContentMetrics();
-    const scaleByHeight = (rect.height - padding * 2) / contentHeight;
-    const scaleByWidth  = (rect.width  - padding * 2) / contentWidth;
+    const contentWidth  = (roiBBox?.width  || svgWidth);
+    const contentHeight = (roiBBox?.height || svgHeight);
+    const scaleByHeight = rect.height / (contentHeight * 1.2);
+    const scaleByWidth  = rect.width  / (contentWidth  * 1.2);
     baseScale = Math.min(scaleByWidth, scaleByHeight);
   }
 
   function updateSvgTransform(){
     if (!svgEl) return;
-    const scale = baseScale * viewScale;
-    const { width, height, offsetX, offsetY } = getContentMetrics();
     const rect = svgViewport.getBoundingClientRect();
-    const tx = (rect.width - width * scale) / 2 + panX - offsetX * scale;
-    const ty = (rect.height - height * scale) / 2 + panY - offsetY * scale;
+    const scale = baseScale * viewScale;
+    const tx = (rect.width - svgWidth * scale) / 2 + panX;
+    const ty = (rect.height - svgHeight * scale) / 2 + panY;
     svgContainer.style.transformOrigin = "top left";
     svgContainer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   }
@@ -609,9 +593,8 @@
     if (!roiElements.length || !roiBBox) return;
     const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-    const { width, height, offsetX, offsetY } = getContentMetrics();
-    const cx = offsetX + width / 2;
-    const cy = offsetY + height / 2;
+    const cx = (roiBBox.minX + roiBBox.maxX) / 2;
+    const cy = (roiBBox.minY + roiBBox.maxY) / 2;
 
     // 让 ROI 中心对齐到视口中心
     panX = rect.width / 2 - cx * scale;
@@ -622,9 +605,8 @@
   function clientToSvg(clientX, clientY){
     const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-    const { width, height, offsetX, offsetY } = getContentMetrics();
-    const tx = (rect.width - width * scale) / 2 + panX - offsetX * scale;
-    const ty = (rect.height - height * scale) / 2 + panY - offsetY * scale;
+    const tx = (rect.width - svgWidth * scale) / 2 + panX;
+    const ty = (rect.height - svgHeight * scale) / 2 + panY;
     const x = (clientX - rect.left - tx) / scale;
     const y = (clientY - rect.top - ty) / scale;
     return { x, y };
@@ -642,9 +624,9 @@
     let newViewScale = viewScale * factor;
     newViewScale = Math.max(0.2, Math.min(6, newViewScale));
     const newScale = baseScale * newViewScale;
-    const { width, height, offsetX, offsetY } = getContentMetrics();
-    const txOld = (rect.width - width * oldScale) / 2 + panX - offsetX * oldScale;
-    const tyOld = (rect.height - height * oldScale) / 2 + panY - offsetY * oldScale;
+
+    const txOld = (rect.width - svgWidth * oldScale) / 2 + panX;
+    const tyOld = (rect.height - svgHeight * oldScale) / 2 + panY;
 
     const imgX = (mouseX - txOld) / oldScale;
     const imgY = (mouseY - tyOld) / oldScale;
@@ -652,8 +634,8 @@
     const txNew = mouseX - imgX * newScale;
     const tyNew = mouseY - imgY * newScale;
 
-    panX = txNew - (rect.width - width * newScale) / 2 + offsetX * newScale;
-    panY = tyNew - (rect.height - height * newScale) / 2 + offsetY * newScale;
+    panX = txNew - (rect.width - svgWidth * newScale) / 2;
+    panY = tyNew - (rect.height - svgHeight * newScale) / 2;
     viewScale = newViewScale;
     updateSvgTransform();
   }, { passive: false });
@@ -811,12 +793,8 @@
       panY = 0;
 
       setupRoisFromSvg(svgEl);
-
-      // ensure measurements use the latest layout
-      requestAnimationFrame(() => {
-        computeBaseScale();
-        centerOnRoiBBox();
-      });
+      computeBaseScale();
+      centerOnRoiBBox();
 
       hoverInfo.textContent = "SVG loaded. Label mode: click or drag box. Move mode: drag to pan.";
     } catch (err) {
@@ -835,7 +813,10 @@
     roiElements = [];
     let autoIdCount = 1;
     paths.forEach(el => {
-      const baseFill = "#c9d0d8"; // 更灰一点
+      const styleAttr = el.getAttribute("style") || "";
+      if (styleAttr.includes("stroke:none")) return;
+
+      const baseFill = "#d1d5db"; // 更灰一点
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
       el.style.stroke = "#000000";
@@ -850,20 +831,20 @@
 
       el.classList.add("roi-shape");
 
-      el.addEventListener("pointerenter", () => {
+      el.addEventListener("mouseenter", () => {
         el.classList.add("roi-hover");
         el.dataset.baseStrokeWidth = el.style.strokeWidth || "1.6";
         const roiId = el.id;
         const labelId = roiAssignments[roiId];
         if (!labelId) {
-          const base = el.dataset.baseFill || "#c9d0d8";
-          el.style.fill = lightenHex(base, 0.4); // 无标签：底色提亮
+          const base = el.dataset.baseFill || "#d1d5db";
+          el.style.fill = lightenHex(base, 0.28); // 无标签：底色提亮
         } else {
           const label = labels.find(l => l.id === labelId);
           const c = label ? label.color : "#ffffff";
-          el.style.fill = lightenHex(c, 0.6); // 有标签：标签色 -> 更明显的淡色
+          el.style.fill = lightenHex(c, 0.5); // 有标签：标签色 -> 淡色
         }
-        el.style.strokeWidth = "2.8";
+        el.style.strokeWidth = "2.3";
 
         const currentLabelId = roiAssignments[roiId];
         const labelName = currentLabelId
@@ -872,7 +853,7 @@
         hoverInfo.textContent = `ROI: ${roiId} · Label: ${labelName}`;
       });
 
-      el.addEventListener("pointerleave", () => {
+      el.addEventListener("mouseleave", () => {
         el.classList.remove("roi-hover");
         el.style.strokeWidth = el.dataset.baseStrokeWidth || "1.6";
         updateRoiAppearance(el); // 恢复为标签色或灰色
@@ -924,14 +905,14 @@
     const roiId = el.id;
     const labelId = roiAssignments[roiId];
     if (!labelId) {
-      el.style.fill = el.dataset.baseFill || "#c9d0d8";
+      el.style.fill = el.dataset.baseFill || "#d1d5db";
       el.classList.remove("roi-labeled");
       return;
     }
     const label = labels.find(l => l.id === labelId);
     if (!label) {
       delete roiAssignments[roiId];
-      el.style.fill = el.dataset.baseFill || "#c9d0d8";
+      el.style.fill = el.dataset.baseFill || "#d1d5db";
       el.classList.remove("roi-labeled");
       return;
     }
@@ -1120,7 +1101,7 @@
     labelColorInput.value = getNextColor();
     refreshLabelList();
     updateGlobalStats();
-    setInteractionMode("move");
+    setInteractionMode("label");
     hoverInfo.textContent = "Loading SVG map…";
     loadSvgMap();
   })();
