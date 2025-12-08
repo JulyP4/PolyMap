@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     :root {
-      --bg: #020617;
+      --bg: #0c1320;
       --panel: #0f172a;
       --panel2: #111827;
       --border: #1f2937;
@@ -21,7 +21,7 @@
     body {
       margin: 0;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: radial-gradient(circle at top, #111827 0, #020617 55%);
+      background: radial-gradient(circle at top, #161c2a 0, #0c1320 55%);
       color: var(--text);
       height: 100vh;
       display: flex;
@@ -166,7 +166,7 @@
       padding: 0.28rem 0.6rem;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: #020617;
+      background: #0c1320;
       color: var(--text);
       cursor: pointer;
       gap: 0.3rem;
@@ -219,7 +219,7 @@
       min-height: 0;
       border-radius: 0.7rem;
       border: 1px solid var(--border);
-      background: #020617;
+      background: #0f1724;
       position: relative;
       overflow: hidden;
       display: flex;
@@ -239,7 +239,7 @@
     }
     #svgContainer svg {
       display: block;
-      background: #020617;
+      background: #0f1724;
     }
 
     #boxOverlay {
@@ -487,7 +487,7 @@
   let panMoved = false;
 
   // Label 模式：点击/框选
-  let interactionMode = "label"; // "label" | "move"
+  let interactionMode = "move"; // "label" | "move"
   let labelMouseDown = false;
   let labelStartClientX = 0, labelStartClientY = 0;
   let labelCurrentClientX = 0, labelCurrentClientY = 0;
@@ -583,8 +583,14 @@
     if (!svgEl) return;
     const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-    const tx = (rect.width - svgWidth * scale) / 2 + panX;
-    const ty = (rect.height - svgHeight * scale) / 2 + panY;
+    const contentMinX = roiBBox ? roiBBox.minX : 0;
+    const contentMinY = roiBBox ? roiBBox.minY : 0;
+    const contentWidth = roiBBox ? roiBBox.width : svgWidth;
+    const contentHeight = roiBBox ? roiBBox.height : svgHeight;
+    const cx = contentMinX + contentWidth / 2;
+    const cy = contentMinY + contentHeight / 2;
+    const tx = rect.width / 2 - cx * scale + panX;
+    const ty = rect.height / 2 - cy * scale + panY;
     svgContainer.style.transformOrigin = "top left";
     svgContainer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   }
@@ -729,8 +735,13 @@
     const affected = [];
     roiElements.forEach(el => {
       const b = el.getBoundingClientRect();
-      const overlap = !(b.right < minXClient || b.left > maxXClient || b.bottom < minYClient || b.top > maxYClient);
-      if (overlap) affected.push(el);
+      const fullyInside = (
+        b.left >= minXClient &&
+        b.right <= maxXClient &&
+        b.top >= minYClient &&
+        b.bottom <= maxYClient
+      );
+      if (fullyInside) affected.push(el);
     });
 
     affected.forEach(el => {
@@ -816,7 +827,7 @@
       const styleAttr = el.getAttribute("style") || "";
       if (styleAttr.includes("stroke:none")) return;
 
-      const baseFill = "#d1d5db"; // 更灰一点
+      const baseFill = "#c2c6cf"; // 更灰一点
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
       el.style.stroke = "#000000";
@@ -1101,7 +1112,7 @@
     labelColorInput.value = getNextColor();
     refreshLabelList();
     updateGlobalStats();
-    setInteractionMode("label");
+    setInteractionMode("move");
     hoverInfo.textContent = "Loading SVG map…";
     loadSvgMap();
   })();
