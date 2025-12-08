@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Root SVG Map Labeler</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #020617;
+      --panel: #0f172a;
+      --panel2: #111827;
+      --border: #1f2937;
+      --accent: #3b82f6;
+      --accent-soft: rgba(59, 130, 246, 0.16);
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --danger: #f97373;
+    }
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #111827 0, #020617 55%);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.95);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #93c5fd;
+    }
+    header span {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .pill {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      background: rgba(15, 23, 42, 0.85);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1.6fr) 260px;
+      gap: 0.6rem;
+      padding: 0.6rem;
+      min-height: 0;
+    }
+    @media (max-width: 1024px) {
+      main {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: auto auto auto;
+      }
+    }
+
+    .panel {
+      background: var(--panel);
+      border-radius: 0.75rem;
+      border: 1px solid var(--border);
+      padding: 0.7rem;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+    }
+    .panel-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .panel-subtitle {
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+    .panel-body {
+      flex: 1;
+      overflow: auto;
+      padding-right: 0.3rem;
+    }
+
+    .section {
+      margin-bottom: 0.8rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px dashed #1f2937;
+    }
+    .section:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+    .section-title {
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.3rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+
+    input[type="file"],
+    input[type="text"] {
+      width: 100%;
+      font-size: 0.8rem;
+      padding: 0.3rem 0.4rem;
+      border-radius: 0.45rem;
+      border: 1px solid var(--border);
+      background: var(--panel2);
+      color: var(--text);
+      outline: none;
+    }
+    input[type="file"] { padding: 0.2rem 0.3rem; }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+    }
+    input[type="color"] {
+      width: 100%;
+      height: 1.8rem;
+      border-radius: 0.4rem;
+      border: 1px solid var(--border);
+      background: transparent;
+      padding: 0;
+      cursor: pointer;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      padding: 0.28rem 0.6rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: #020617;
+      color: var(--text);
+      cursor: pointer;
+      gap: 0.3rem;
+      transition: all 0.12s ease;
+    }
+    .button.small { font-size: 0.75rem; padding: 0.18rem 0.5rem; }
+    .button.primary {
+      background: linear-gradient(135deg, #2563eb, #4f46e5);
+      border-color: transparent;
+      color: white;
+    }
+    .button.danger {
+      border-color: rgba(248, 113, 113, 0.8);
+      color: #fecaca;
+    }
+    .button:hover {
+      border-color: var(--accent);
+      background: #020617;
+    }
+    .button.primary:hover {
+      box-shadow: 0 10px 25px rgba(37, 99, 235, 0.6);
+      transform: translateY(-1px);
+    }
+    .button.danger:hover {
+      background: rgba(185, 28, 28, 0.45);
+    }
+
+    .row {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 0.4rem;
+    }
+    .row > * { flex: 1; }
+
+    .hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.4;
+      margin-top: 0.25rem;
+    }
+
+    #svgViewport {
+      flex: 1;
+      min-height: 0;
+      border-radius: 0.7rem;
+      border: 1px solid var(--border);
+      background: #020617;
+      position: relative;
+      overflow: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem;
+    }
+
+    #svgContainer svg {
+      max-width: 100%;
+      max-height: 100%;
+      width: auto;
+      height: auto;
+      display: block;
+      background: #020617;
+    }
+
+    #svgContainer {
+      position: relative;
+      display: inline-block;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.8rem;
+      padding: 1.2rem;
+    }
+
+    .status-line { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+
+    /* Label list */
+    #labelList {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      margin-top: 0.3rem;
+    }
+    .label-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.25rem 0.4rem;
+      background: rgba(15, 23, 42, 0.95);
+      border-radius: 0.5rem;
+      border: 1px solid transparent;
+      cursor: pointer;
+      gap: 0.4rem;
+      transition: all 0.12s ease;
+    }
+    .label-item:hover { border-color: var(--border); }
+    .label-item.active {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-soft);
+      background: radial-gradient(circle at top, var(--accent-soft), #020617);
+    }
+    .label-color-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      border: 1px solid #020617;
+      flex-shrink: 0;
+    }
+    .label-main { flex: 1; min-width: 0; }
+    .label-main div:first-child {
+      font-size: 0.8rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .label-main div:last-child {
+      font-size: 0.7rem;
+      color: var(--muted);
+    }
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.05rem 0.35rem;
+      border-radius: 999px;
+      border: 1px solid #475569;
+      color: var(--muted);
+    }
+
+    footer {
+      padding: 0.3rem 0.8rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      background: rgba(15, 23, 42, 0.96);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* ROI 样式：纯 SVG 交互 */
+    .roi-shape {
+      cursor: pointer;
+      transition: transform 0.12s ease-out, fill 0.12s ease-out, stroke-width 0.12s ease-out;
+      transform-box: fill-box;
+      transform-origin: center;
+      vector-effect: non-scaling-stroke;
+    }
+    .roi-hover {
+      transform: scale(1.05);
+      stroke-width: 1.4px;
+    }
+    .roi-labeled {
+      /* 这里只是一个标记类，实际颜色用 style.fill 控制 */
+    }
+
+  </style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Root SVG Map Labeler</h1>
+    <span>Directly use the root SVG as a high-resolution map and add labels.</span>
+  </div>
+  <div class="pill">
+    <span>Click ROI: toggle / set label</span>
+    <span>Active label → colored fill</span>
+  </div>
+</header>
+
+<main>
+  <!-- 左侧：文件与导入导出 -->
+  <aside class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Map & Project</div>
+    </div>
+    <div class="panel-body">
+      <div class="section">
+        <div class="section-title">1. Root map (SVG)</div>
+        <div class="hint">
+          This page always uses <strong>Vector image_ blank root.svg</strong> in the same folder.<br/>
+          The SVG geometry is never changed; only labels are added on top.
+        </div>
+        <div id="mapInfo" class="status-line"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">2. Import / Export labels</div>
+        <div class="row">
+          <button class="button small primary" id="exportJsonBtn">Export labels (JSON)</button>
+          <button class="button small" id="clearAssignmentsBtn">Clear ROI labels</button>
+        </div>
+        <label for="labelsFileInput">Import labels JSON</label>
+        <input type="file" id="labelsFileInput" accept="application/json,.json" />
+        <div class="hint">
+          JSON contains: label definitions + ROI assignments.<br/>
+          SVG file is assumed to be the same root map.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">3. Global stats</div>
+        <div id="globalStats" class="hint">SVG not loaded yet.</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 中间：SVG 视图 -->
+  <section class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Root map view (SVG)</div>
+        <div class="panel-subtitle">
+          Each cell contour is a vector ROI path. Only fills are changed; strokes remain crisp and uniform.
+        </div>
+      </div>
+      <div id="hoverInfo" class="pill">Loading SVG…</div>
+    </div>
+    <div id="svgViewport">
+      <div id="svgContainer">
+        <div id="emptyState" class="empty-state">
+          Loading <strong>Vector image_ blank root.svg</strong>…
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 右侧：标签管理 -->
+  <aside class="panel">
+    <div class="panel-header">
+      <div class="panel-title">Labels</div>
+      <button class="button small danger" id="clearAllLabelsBtn">Delete all labels</button>
+    </div>
+    <div class="panel-body">
+      <div class="section">
+        <div class="section-title">1. Create label</div>
+        <label for="labelNameInput">Label name</label>
+        <input type="text" id="labelNameInput" placeholder="e.g. Meristem / Cortex / QC" />
+        <label for="labelColorInput">Label color</label>
+        <input type="color" id="labelColorInput" />
+        <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">Add label</button>
+        <div class="hint">
+          Select an active label, then click ROIs on the map to assign / overwrite it.<br/>
+          No active label: clicking ROIs will clear their labels.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">2. Label list</div>
+        <div id="labelList"></div>
+        <div id="labelEmptyHint" class="hint">No labels yet. Please create at least one.</div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <div>SVG geometry stays untouched. Only label fills are stored and exported.</div>
+  <div id="selectionStatus">No ROI selected</div>
+</footer>
+
+<script>
+  // ---------- basic state ----------
+  const svgContainer = document.getElementById("svgContainer");
+  const emptyState   = document.getElementById("emptyState");
+  const hoverInfo    = document.getElementById("hoverInfo");
+  const mapInfo      = document.getElementById("mapInfo");
+  const globalStats  = document.getElementById("globalStats");
+  const selectionStatus = document.getElementById("selectionStatus");
+
+  const exportJsonBtn       = document.getElementById("exportJsonBtn");
+  const labelsFileInput     = document.getElementById("labelsFileInput");
+  const clearAssignmentsBtn = document.getElementById("clearAssignmentsBtn");
+
+  const addLabelBtn      = document.getElementById("addLabelBtn");
+  const labelNameInput   = document.getElementById("labelNameInput");
+  const labelColorInput  = document.getElementById("labelColorInput");
+  const labelListEl      = document.getElementById("labelList");
+  const labelEmptyHint   = document.getElementById("labelEmptyHint");
+  const clearAllLabelsBtn= document.getElementById("clearAllLabelsBtn");
+
+  const defaultColors = ["#ef4444","#f97316","#facc15","#22c55e","#14b8a6",
+                         "#0ea5e9","#6366f1","#8b5cf6","#ec4899","#f97373"];
+  let colorIndex = 0;
+
+  // 所有 ROI（SVG path 元素）
+  let roiElements = [];  // array of SVGElement
+  // 标签定义
+  let labels = [];       // [{id, name, color}]
+  let activeLabelId = null;
+  // ROI -> labelId 映射，key 用 ROI 的原始 id（例如 path23）
+  let roiAssignments = {};
+
+  const SVG_FILENAME = "Vector image_ blank root.svg"; // 方便以后扩展多 map
+
+  function getNextColor(){
+    const c = defaultColors[colorIndex % defaultColors.length];
+    colorIndex++;
+    return c;
+  }
+  function hexToRgb(hex){
+    hex = hex.replace("#","");
+    if (hex.length === 3) {
+      hex = hex.split("").map(c => c + c).join("");
+    }
+    const num = parseInt(hex,16);
+    return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
+  }
+
+  function updateGlobalStats(){
+    if (!roiElements.length) {
+      globalStats.textContent = "SVG not loaded yet.";
+      return;
+    }
+    const total = roiElements.length;
+    const labeled = Object.values(roiAssignments).filter(v => !!v).length;
+    const pct = total ? (labeled / total * 100).toFixed(1) : 0;
+    globalStats.innerHTML = `Total ROIs: <strong>${total}</strong> · Labeled: <strong>${labeled}</strong> (${pct}%)`;
+  }
+  function updateSelectionStatus(text){
+    selectionStatus.textContent = text || "No ROI selected";
+  }
+
+  // ---------- SVG 加载 & ROI 初始化 ----------
+  async function loadSvgMap(){
+    try {
+      const resp = await fetch(SVG_FILENAME);
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const svgText = await resp.text();
+      svgContainer.innerHTML = svgText;
+      const svgEl = svgContainer.querySelector("svg");
+      if (!svgEl) {
+        emptyState.textContent = "Failed to load SVG: no <svg> root found.";
+        hoverInfo.textContent = "SVG load error";
+        return;
+      }
+      emptyState.style.display = "none";
+      hoverInfo.textContent = "SVG loaded. Hover / click cells to view / label.";
+      mapInfo.textContent = `Map file: ${SVG_FILENAME} · viewBox: ${svgEl.getAttribute("viewBox") || "none"}`;
+
+      setupRoisFromSvg(svgEl);
+    } catch (err) {
+      console.error(err);
+      emptyState.textContent = "Failed to load SVG file.";
+      hoverInfo.textContent = "SVG load error";
+    }
+  }
+
+  function setupRoisFromSvg(svgEl){
+    // 只在主图层里找 path，避免 <defs> / clipPath
+    let paths = svgEl.querySelectorAll("g#layer-MC0 path, g[id^='layer'] path");
+    if (!paths.length) {
+      // 回退：所有可见 path
+      paths = svgEl.querySelectorAll("path");
+    }
+
+    roiElements = [];
+    let autoIdCount = 1;
+    paths.forEach(el => {
+      // 粗略过滤：stroke 不能是 none
+      const styleAttr = el.getAttribute("style") || "";
+      if (styleAttr.includes("stroke:none")) return;
+
+      // 记录原始 fill，统一内部用白色做”空 map“
+      const computedFill = (styleAttr.match(/fill:([^;]+)/)?.[1] || "#ffffff").trim();
+      el.dataset.baseFill = computedFill.toLowerCase() === "none" ? "#ffffff" : computedFill;
+
+      if (!el.id || el.id === "") {
+        el.id = "roi_auto_" + autoIdCount++;
+      }
+      el.classList.add("roi-shape");
+
+      // 初始状态：未标注 → baseFill
+      el.style.fill = el.dataset.baseFill;
+
+      // 交互
+      el.addEventListener("mouseenter", () => {
+        el.classList.add("roi-hover");
+        const roiId = el.id;
+        const currentLabelId = roiAssignments[roiId];
+        const labelName = currentLabelId ? (labels.find(l => l.id === currentLabelId)?.name || currentLabelId) : "Unlabeled";
+        hoverInfo.textContent = `ROI: ${roiId} · Label: ${labelName}`;
+      });
+      el.addEventListener("mouseleave", () => {
+        el.classList.remove("roi-hover");
+        hoverInfo.textContent = "Hover a cell to see ROI id and label.";
+      });
+      el.addEventListener("click", () => {
+        const roiId = el.id;
+        if (activeLabelId) {
+          roiAssignments[roiId] = activeLabelId;
+        } else {
+          delete roiAssignments[roiId];
+        }
+        updateRoiAppearance(el);
+        const currentLabelId = roiAssignments[roiId];
+        if (currentLabelId) {
+          const ln = labels.find(l => l.id === currentLabelId)?.name || currentLabelId;
+          updateSelectionStatus(`ROI ${roiId} set to label ${ln}.`);
+        } else {
+          updateSelectionStatus(`ROI ${roiId} cleared.`);
+        }
+        updateGlobalStats();
+      });
+
+      roiElements.push(el);
+    });
+
+    updateGlobalStats();
+  }
+
+  function updateRoiAppearance(el){
+    const roiId = el.id;
+    const labelId = roiAssignments[roiId];
+    if (!labelId) {
+      el.style.fill = el.dataset.baseFill || "#ffffff";
+      el.classList.remove("roi-labeled");
+      return;
+    }
+    const label = labels.find(l => l.id === labelId);
+    if (!label) {
+      delete roiAssignments[roiId];
+      el.style.fill = el.dataset.baseFill || "#ffffff";
+      el.classList.remove("roi-labeled");
+      return;
+    }
+    const {r,g,b} = hexToRgb(label.color);
+    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.4)`;  // 柔和半透明填充
+    el.classList.add("roi-labeled");
+  }
+
+  function refreshAllRoisAppearance(){
+    roiElements.forEach(updateRoiAppearance);
+  }
+
+  // ---------- 标签管理 ----------
+  function refreshLabelList(){
+    labelListEl.innerHTML = "";
+    if (!labels.length) {
+      labelEmptyHint.style.display = "block";
+    } else {
+      labelEmptyHint.style.display = "none";
+    }
+
+    const counts = {};
+    Object.values(roiAssignments).forEach(id => {
+      if (!id) return;
+      counts[id] = (counts[id] || 0) + 1;
+    });
+
+    labels.forEach(label => {
+      const item = document.createElement("div");
+      item.className = "label-item" + (label.id === activeLabelId ? " active" : "");
+      const dot = document.createElement("div");
+      dot.className = "label-color-dot";
+      dot.style.backgroundColor = label.color;
+
+      const main = document.createElement("div");
+      main.className = "label-main";
+      const nDiv = document.createElement("div");
+      nDiv.textContent = label.name || "(Untitled)";
+      const mDiv = document.createElement("div");
+      mDiv.textContent = `ID: ${label.id} · ROIs: ${counts[label.id] || 0}`;
+      main.appendChild(nDiv);
+      main.appendChild(mDiv);
+
+      const right = document.createElement("div");
+      right.style.display = "flex";
+      right.style.alignItems = "center";
+      right.style.gap = "0.25rem";
+
+      const badge = document.createElement("div");
+      badge.className = "badge";
+      badge.textContent = "Active";
+      if (label.id !== activeLabelId) badge.style.visibility = "hidden";
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "button small icon";
+      delBtn.textContent = "×";
+      delBtn.title = "Delete this label";
+      delBtn.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        deleteLabel(label.id);
+      });
+
+      right.appendChild(badge);
+      right.appendChild(delBtn);
+
+      item.appendChild(dot);
+      item.appendChild(main);
+      item.appendChild(right);
+
+      item.addEventListener("click", () => {
+        activeLabelId = (activeLabelId === label.id ? null : label.id);
+        refreshLabelList();
+      });
+
+      labelListEl.appendChild(item);
+    });
+  }
+
+  function deleteLabel(id){
+    labels = labels.filter(l => l.id !== id);
+    if (activeLabelId === id) activeLabelId = null;
+    for (const [roiId, labId] of Object.entries(roiAssignments)) {
+      if (labId === id) delete roiAssignments[roiId];
+    }
+    refreshLabelList();
+    refreshAllRoisAppearance();
+    updateGlobalStats();
+  }
+
+  // ---------- 导入 / 导出 ----------
+  function exportLabels(){
+    if (!roiElements.length) {
+      alert("SVG map is not loaded yet.");
+      return;
+    }
+    const obj = {
+      version: 1,
+      mapFile: SVG_FILENAME,
+      labels,
+      assignments: roiAssignments,
+      timestamp: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "root_svg_labels.json";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function importLabelsFromObject(obj){
+    if (!obj || !obj.labels || !obj.assignments) {
+      alert("Invalid JSON: no labels / assignments.");
+      return;
+    }
+    if (obj.mapFile && obj.mapFile !== SVG_FILENAME) {
+      const proceed = confirm(
+        `This JSON was exported for "${obj.mapFile}", but current map is "${SVG_FILENAME}".\n` +
+        `Continue to apply labels anyway?`
+      );
+      if (!proceed) return;
+    }
+    labels = obj.labels;
+    roiAssignments = obj.assignments;
+    activeLabelId = labels.length ? labels[0].id : null;
+    refreshLabelList();
+    refreshAllRoisAppearance();
+    updateGlobalStats();
+  }
+
+  // ---------- 按钮事件 ----------
+  exportJsonBtn.addEventListener("click", exportLabels);
+
+  labelsFileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const obj = JSON.parse(ev.target.result);
+        importLabelsFromObject(obj);
+      } catch (err) {
+        console.error(err);
+        alert("Failed to parse JSON.");
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  clearAssignmentsBtn.addEventListener("click", () => {
+    roiAssignments = {};
+    refreshAllRoisAppearance();
+    updateGlobalStats();
+  });
+
+  addLabelBtn.addEventListener("click", () => {
+    const name = labelNameInput.value.trim();
+    const color = labelColorInput.value || getNextColor();
+    const id = "L" + (labels.length + 1);
+    labels.push({
+      id,
+      name: name || `Label ${labels.length + 1}`,
+      color
+    });
+    activeLabelId = id;
+    labelNameInput.value = "";
+    labelColorInput.value = getNextColor();
+    refreshLabelList();
+    updateGlobalStats();
+  });
+
+  clearAllLabelsBtn.addEventListener("click", () => {
+    const ok = confirm("Delete all labels and clear assignments?");
+    if (!ok) return;
+    labels = [];
+    roiAssignments = {};
+    activeLabelId = null;
+    refreshLabelList();
+    refreshAllRoisAppearance();
+    updateGlobalStats();
+  });
+
+  // ---------- 初始化 ----------
+  (function init(){
+    labelColorInput.value = getNextColor();
+    refreshLabelList();
+    updateGlobalStats();
+    hoverInfo.textContent = "Loading SVG map…";
+    loadSvgMap();
+  })();
+</script>
+</body>
+</html>
