@@ -87,7 +87,7 @@
     .panel-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       margin-bottom: 0.5rem;
     }
     .panel-title {
@@ -322,14 +322,14 @@
       align-items: center;
     }
 
-    /* ROI：统一描边，hover 更明显（更粗 + 光晕） */
+    /* ROI：淡灰底色，粗细统一；hover 变白 + 粗线 + 强光晕 */
     .roi-shape {
       cursor: pointer;
-      transition: fill 0.12s ease-out, filter 0.12s ease-out;
+      transition: fill 0.12s ease-out, filter 0.12s ease-out, stroke-width 0.12s ease-out;
       vector-effect: non-scaling-stroke;
     }
     .roi-hover {
-      filter: drop-shadow(0 0 4px rgba(148, 163, 184, 0.95));
+      filter: drop-shadow(0 0 6px rgba(148, 163, 184, 0.98));
     }
   </style>
 </head>
@@ -341,8 +341,8 @@
   </div>
   <div class="pill">
     <span>Wheel: zoom at mouse</span>
+    <span>Label mode: click or drag box to label ROIs</span>
     <span>Move mode: drag to pan</span>
-    <span>Click/Box: label ROIs</span>
   </div>
 </header>
 
@@ -385,15 +385,14 @@
 
   <!-- 中间：SVG 视图区 -->
   <section class="panel">
-    <div class="panel-header" style="align-items:flex-start;">
+    <div class="panel-header">
       <div>
         <div class="panel-title">Root map view (SVG)</div>
         <div class="panel-subtitle">
           Each cell contour is a vector ROI path. Only fills are changed; strokes remain crisp and uniform.
         </div>
         <div style="margin-top:0.35rem; display:flex; gap:0.3rem;">
-          <button class="button small mode-active" id="modeClickBtn">Click</button>
-          <button class="button small" id="modeBoxBtn">Box</button>
+          <button class="button small mode-active" id="modeLabelBtn">Label</button>
           <button class="button small" id="modeMoveBtn">Move</button>
         </div>
       </div>
@@ -424,9 +423,10 @@
         <input type="color" id="labelColorInput" />
         <button class="button primary" id="addLabelBtn" style="margin-top:0.4rem;width:100%;">Add label</button>
         <div class="hint">
-          Active label selected → click/box ROIs to set/overwrite that label.<br/>
-          If a ROI already has the active label, clicking/boxing again will clear it.<br/>
-          No active label: clicking/boxing clears labels.
+          Label mode:<br/>
+          • Click ROI → toggle this ROI’s label (same as before).<br/>
+          • Drag a box → set/overwrite label for all ROIs in the box (no toggle).<br/>
+          No active label: click/box clears labels.
         </div>
       </div>
 
@@ -466,8 +466,7 @@
   const labelEmptyHint    = document.getElementById("labelEmptyHint");
   const clearAllLabelsBtn = document.getElementById("clearAllLabelsBtn");
 
-  const modeClickBtn = document.getElementById("modeClickBtn");
-  const modeBoxBtn   = document.getElementById("modeBoxBtn");
+  const modeLabelBtn = document.getElementById("modeLabelBtn");
   const modeMoveBtn  = document.getElementById("modeMoveBtn");
 
   const defaultColors = ["#ef4444","#f97316","#facc15","#22c55e","#14b8a6",
@@ -481,17 +480,20 @@
   let baseScale = 1, viewScale = 1;
   let panX = 0, panY = 0;
 
+  // Move 模式拖动
   let isPanning = false;
   let panStartX = 0, panStartY = 0;
   let panStartClientX = 0, panStartClientY = 0;
   let panMoved = false;
 
-  // Box selection
-  let interactionMode = "click";  // "click" | "box" | "move"
-  let boxSelecting = false;
-  let boxStartClientX = 0, boxStartClientY = 0;
-  let boxCurrentClientX = 0, boxCurrentClientY = 0;
-  let boxMoved = false;
+  // Label 模式：点击/框选
+  let interactionMode = "label"; // "label" | "move"
+  let labelMouseDown = false;
+  let labelStartClientX = 0, labelStartClientY = 0;
+  let labelCurrentClientX = 0, labelCurrentClientY = 0;
+  let labelIsBox = false;
+  let labelBoxMoved = false;
+  let ignoreNextClick = false;
 
   // ROI & 标签
   let roiElements = [];      // SVG path elements
@@ -528,20 +530,20 @@
   // ---------- 模式切换 ----------
   function setInteractionMode(mode){
     interactionMode = mode;
-    modeClickBtn.classList.toggle("mode-active", mode === "click");
-    modeBoxBtn.classList.toggle("mode-active", mode === "box");
+    modeLabelBtn.classList.toggle("mode-active", mode === "label");
     modeMoveBtn.classList.toggle("mode-active", mode === "move");
   }
-
-  modeClickBtn.addEventListener("click", () => setInteractionMode("click"));
-  modeBoxBtn.addEventListener("click",   () => setInteractionMode("box"));
+  modeLabelBtn.addEventListener("click", () => setInteractionMode("label"));
   modeMoveBtn.addEventListener("click",  () => setInteractionMode("move"));
 
   // ----------- SVG 缩放 / 平移 -----------
   function computeBaseScale(){
     if (!svgWidth || !svgHeight) return;
     const rect = svgViewport.getBoundingClientRect();
-    baseScale = Math.min(rect.width / svgWidth, rect.height / svgHeight);
+    // 以高度为基准，但缩小 20%，初始留一些空隙
+    const scaleByHeight = rect.height / (svgHeight * 1.2);
+    const scaleByWidth  = rect.width  / (svgWidth  * 1.2);
+    baseScale = Math.min(scaleByWidth, scaleByHeight);
   }
 
   function updateSvgTransform(){
@@ -594,9 +596,9 @@
 
   svgViewport.addEventListener("mousedown", (e) => {
     if (!svgEl) return;
-    if (e.button !== 0) return;  // only left button
+    if (e.button !== 0) return; // only left button
+
     if (interactionMode === "move") {
-      // 平移模式
       e.preventDefault();
       isPanning = true;
       panMoved = false;
@@ -605,21 +607,15 @@
       panStartY = panY;
       panStartClientX = e.clientX;
       panStartClientY = e.clientY;
-    } else if (interactionMode === "box") {
-      // 框选模式
-      e.preventDefault();
-      boxSelecting = true;
-      boxMoved = false;
-      const rect = svgViewport.getBoundingClientRect();
-      boxStartClientX = e.clientX;
-      boxStartClientY = e.clientY;
-      boxCurrentClientX = e.clientX;
-      boxCurrentClientY = e.clientY;
-      boxOverlay.style.display = "block";
-      boxOverlay.style.left = (e.clientX - rect.left) + "px";
-      boxOverlay.style.top  = (e.clientY - rect.top) + "px";
-      boxOverlay.style.width = "0px";
-      boxOverlay.style.height = "0px";
+    } else {
+      // label 模式：先假设是 click，如果移动超阈值则变成 box
+      labelMouseDown = true;
+      labelIsBox = false;
+      labelBoxMoved = false;
+      labelStartClientX = e.clientX;
+      labelStartClientY = e.clientY;
+      labelCurrentClientX = e.clientX;
+      labelCurrentClientY = e.clientY;
     }
   });
 
@@ -631,23 +627,31 @@
       panX = panStartX + dx;
       panY = panStartY + dy;
       updateSvgTransform();
-    } else if (boxSelecting) {
-      const rect = svgViewport.getBoundingClientRect();
-      boxCurrentClientX = e.clientX;
-      boxCurrentClientY = e.clientY;
-      const x1 = boxStartClientX - rect.left;
-      const y1 = boxStartClientY - rect.top;
-      const x2 = boxCurrentClientX - rect.left;
-      const y2 = boxCurrentClientY - rect.top;
-      const left = Math.min(x1, x2);
-      const top  = Math.min(y1, y2);
-      const width  = Math.abs(x1 - x2);
-      const height = Math.abs(y1 - y2);
-      boxOverlay.style.left = left + "px";
-      boxOverlay.style.top  = top  + "px";
-      boxOverlay.style.width = width + "px";
-      boxOverlay.style.height = height + "px";
-      if (width > 3 || height > 3) boxMoved = true;
+    } else if (labelMouseDown) {
+      const dx = e.clientX - labelStartClientX;
+      const dy = e.clientY - labelStartClientY;
+      labelCurrentClientX = e.clientX;
+      labelCurrentClientY = e.clientY;
+      if (!labelIsBox && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+        labelIsBox = true;
+        boxOverlay.style.display = "block";
+      }
+      if (labelIsBox) {
+        const rect = svgViewport.getBoundingClientRect();
+        const x1 = labelStartClientX - rect.left;
+        const y1 = labelStartClientY - rect.top;
+        const x2 = labelCurrentClientX - rect.left;
+        const y2 = labelCurrentClientY - rect.top;
+        const left = Math.min(x1, x2);
+        const top  = Math.min(y1, y2);
+        const width  = Math.abs(x1 - x2);
+        const height = Math.abs(y1 - y2);
+        boxOverlay.style.left = left + "px";
+        boxOverlay.style.top  = top  + "px";
+        boxOverlay.style.width  = width + "px";
+        boxOverlay.style.height = height + "px";
+        if (width > 3 || height > 3) labelBoxMoved = true;
+      }
     }
   });
 
@@ -657,24 +661,26 @@
       isPanning = false;
       svgViewport.classList.remove("grabbing");
     }
-    if (boxSelecting) {
-      boxSelecting = false;
-      boxOverlay.style.display = "none";
-      if (boxMoved) {
+    if (labelMouseDown) {
+      if (labelIsBox && labelBoxMoved) {
+        // 框选：阻止单击触发
+        ignoreNextClick = true;
         performBoxSelection();
       }
+      labelMouseDown = false;
+      labelIsBox = false;
+      labelBoxMoved = false;
+      boxOverlay.style.display = "none";
     }
   });
 
   function performBoxSelection(){
-    if (!svgEl) return;
-    if (!roiElements.length) return;
+    if (!svgEl || !roiElements.length) return;
 
-    const rect = svgViewport.getBoundingClientRect();
-    const x1Client = boxStartClientX;
-    const y1Client = boxStartClientY;
-    const x2Client = boxCurrentClientX;
-    const y2Client = boxCurrentClientY;
+    const x1Client = labelStartClientX;
+    const y1Client = labelStartClientY;
+    const x2Client = labelCurrentClientX;
+    const y2Client = labelCurrentClientY;
 
     const p1 = clientToSvg(x1Client, y1Client);
     const p2 = clientToSvg(x2Client, y2Client);
@@ -686,15 +692,22 @@
     const affected = [];
     roiElements.forEach(el => {
       const bbox = el.getBBox();
-      const bx1 = bbox.x;
-      const by1 = bbox.y;
-      const bx2 = bbox.x + bbox.width;
-      const by2 = bbox.y + bbox.height;
-      const overlap = !(bx2 < minX || bx1 > maxX || by2 < minY || by1 > maxY);
-      if (overlap) affected.push(el);
+      const cx = bbox.x + bbox.width / 2;
+      const cy = bbox.y + bbox.height / 2;
+      if (cx >= minX && cx <= maxX && cy >= minY && cy <= maxY) {
+        affected.push(el);
+      }
     });
 
-    affected.forEach(el => applyLabelLogicForRoi(el.id));
+    affected.forEach(el => {
+      const roiId = el.id;
+      if (activeLabelId) {
+        // Box：只做“设定/覆盖”，不再 toggle
+        roiAssignments[roiId] = activeLabelId;
+      } else {
+        delete roiAssignments[roiId];
+      }
+    });
 
     refreshAllRoisAppearance();
     updateGlobalStats();
@@ -749,7 +762,7 @@
       updateSvgTransform();
 
       setupRoisFromSvg(svgEl);
-      hoverInfo.textContent = "SVG loaded. Use Click / Box / Move modes to label.";
+      hoverInfo.textContent = "SVG loaded. Label mode: click or drag box. Move mode: drag to pan.";
     } catch (err) {
       console.error(err);
       emptyState.textContent = "Failed to load SVG file.";
@@ -769,11 +782,12 @@
       const styleAttr = el.getAttribute("style") || "";
       if (styleAttr.includes("stroke:none")) return;
 
-      // 统一成：白色填充 + 黑色描边 + 固定线宽
-      el.dataset.baseFill = "#ffffff";
-      el.style.fill = "#ffffff";
+      // 淡灰底色 + 统一描边
+      const baseFill = "#e5e7eb";
+      el.dataset.baseFill = baseFill;
+      el.style.fill = baseFill;
       el.style.stroke = "#000000";
-      el.style.strokeWidth = "1.4";
+      el.style.strokeWidth = "1.6";
       el.style.strokeLinejoin = "round";
       el.style.strokeLinecap = "round";
       el.style.vectorEffect = "non-scaling-stroke";
@@ -786,10 +800,10 @@
 
       el.addEventListener("mouseenter", () => {
         el.classList.add("roi-hover");
-        // hover 时稍微加粗线（在 JS 控制，避免不均匀）
-        el.dataset.baseStrokeWidth = el.style.strokeWidth || "1.4";
-        el.style.strokeWidth = "2.1";
-
+        el.dataset.baseStrokeWidth = el.style.strokeWidth || "1.6";
+        el.dataset.prevFill = el.style.fill || baseFill;
+        el.style.strokeWidth = "2.3";
+        el.style.fill = "#ffffff";  // 上浮时变白
         const roiId = el.id;
         const currentLabelId = roiAssignments[roiId];
         const labelName = currentLabelId
@@ -799,18 +813,21 @@
       });
       el.addEventListener("mouseleave", () => {
         el.classList.remove("roi-hover");
-        el.style.strokeWidth = el.dataset.baseStrokeWidth || "1.4";
+        el.style.strokeWidth = el.dataset.baseStrokeWidth || "1.6";
+        // 恢复为标签颜色或底色
+        updateRoiAppearance(el);
         hoverInfo.textContent = "Hover a cell to see ROI id and label.";
       });
       el.addEventListener("click", () => {
-        // 如果当前在 Move 模式并且拖动过，就不标记
-        if (interactionMode === "move" && panMoved) return;
-
-        if (interactionMode === "move") {
-          // Move 模式下单击不做标注
+        // 如果刚才是 box 操作，就忽略单击事件
+        if (ignoreNextClick) {
+          ignoreNextClick = false;
           return;
         }
-
+        if (interactionMode === "move") {
+          // Move 模式下不标记
+          return;
+        }
         applyLabelLogicForRoi(el.id);
         updateRoiAppearance(el);
         updateGlobalStats();
@@ -840,7 +857,6 @@
         roiAssignments[roiId] = activeLabelId;
       }
     } else {
-      // 无激活标签 → 清除
       delete roiAssignments[roiId];
     }
   }
@@ -849,20 +865,19 @@
     const roiId = el.id;
     const labelId = roiAssignments[roiId];
     if (!labelId) {
-      el.style.fill = el.dataset.baseFill || "#ffffff";
+      el.style.fill = el.dataset.baseFill || "#e5e7eb";
       el.classList.remove("roi-labeled");
       return;
     }
     const label = labels.find(l => l.id === labelId);
     if (!label) {
       delete roiAssignments[roiId];
-      el.style.fill = el.dataset.baseFill || "#ffffff";
+      el.style.fill = el.dataset.baseFill || "#e5e7eb";
       el.classList.remove("roi-labeled");
       return;
     }
     const {r,g,b} = hexToRgb(label.color);
-    // 更接近原色的半透明填充
-    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.8)`;
+    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.85)`;  // 接近原色的高透明度
     el.classList.add("roi-labeled");
   }
 
@@ -954,7 +969,7 @@
       return;
     }
     const obj = {
-      version: 2,
+      version: 3,
       mapFile: SVG_FILENAME,
       labels,
       assignments: roiAssignments,
@@ -1047,7 +1062,7 @@
     labelColorInput.value = getNextColor();
     refreshLabelList();
     updateGlobalStats();
-    setInteractionMode("click");
+    setInteractionMode("label");
     hoverInfo.textContent = "Loading SVG map…";
     loadSvgMap();
   })();
