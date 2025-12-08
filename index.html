@@ -500,6 +500,7 @@
   let labels = [];           // [{id, name, color}]
   let activeLabelId = null;
   let roiAssignments = {};   // { roiId: labelId }
+  let roiBBox = null;        // cached ROI bbox for centering/scale
 
   function getNextColor(){
     const c = defaultColors[colorIndex % defaultColors.length];
@@ -512,7 +513,7 @@
     const num = parseInt(hex,16);
     return { r:(num>>16)&255, g:(num>>8)&255, b:num&255 };
   }
-  function lightenHex(hex, factor=0.6){
+  function lightenHex(hex, factor=0.35){
     // factor: 0~1, 越大越接近白
     const {r,g,b} = hexToRgb(hex);
     const nr = Math.round(r + (255 - r) * factor);
@@ -535,6 +536,29 @@
     selectionStatus.textContent = text || "No ROI selected";
   }
 
+  function recomputeRoiBBox(){
+    if (!roiElements.length) {
+      roiBBox = null;
+      return;
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    roiElements.forEach(el => {
+      const b = el.getBBox();
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.width);
+      maxY = Math.max(maxY, b.y + b.height);
+    });
+    roiBBox = {
+      minX,
+      minY,
+      maxX,
+      maxY,
+      width: maxX - minX,
+      height: maxY - minY
+    };
+  }
+
   // ---------- 模式切换 ----------
   function setInteractionMode(mode){
     interactionMode = mode;
@@ -548,8 +572,10 @@
   function computeBaseScale(){
     if (!svgWidth || !svgHeight) return;
     const rect = svgViewport.getBoundingClientRect();
-    const scaleByHeight = rect.height / (svgHeight * 1.2);
-    const scaleByWidth  = rect.width  / (svgWidth  * 1.2);
+    const contentWidth  = (roiBBox?.width  || svgWidth);
+    const contentHeight = (roiBBox?.height || svgHeight);
+    const scaleByHeight = rect.height / (contentHeight * 1.2);
+    const scaleByWidth  = rect.width  / (contentWidth  * 1.2);
     baseScale = Math.min(scaleByWidth, scaleByHeight);
   }
 
@@ -564,24 +590,15 @@
   }
 
   function centerOnRoiBBox(){
-    if (!roiElements.length) return;
+    if (!roiElements.length || !roiBBox) return;
     const rect = svgViewport.getBoundingClientRect();
     const scale = baseScale * viewScale;
-
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    roiElements.forEach(el => {
-      const b = el.getBBox();
-      minX = Math.min(minX, b.x);
-      minY = Math.min(minY, b.y);
-      maxX = Math.max(maxX, b.x + b.width);
-      maxY = Math.max(maxY, b.y + b.height);
-    });
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
+    const cx = (roiBBox.minX + roiBBox.maxX) / 2;
+    const cy = (roiBBox.minY + roiBBox.maxY) / 2;
 
     // 让 ROI 中心对齐到视口中心
-    panX = -cx * scale + (svgWidth * scale) / 2;
-    panY = -cy * scale + (svgHeight * scale) / 2;
+    panX = rect.width / 2 - cx * scale;
+    panY = rect.height / 2 - cy * scale;
     updateSvgTransform();
   }
 
@@ -704,26 +721,15 @@
   function performBoxSelection(){
     if (!svgEl || !roiElements.length) return;
 
-    const x1Client = labelStartClientX;
-    const y1Client = labelStartClientY;
-    const x2Client = labelCurrentClientX;
-    const y2Client = labelCurrentClientY;
-
-    const p1 = clientToSvg(x1Client, y1Client);
-    const p2 = clientToSvg(x2Client, y2Client);
-    const minX = Math.min(p1.x, p2.x);
-    const maxX = Math.max(p1.x, p2.x);
-    const minY = Math.min(p1.y, p2.y);
-    const maxY = Math.max(p1.y, p2.y);
+    const minXClient = Math.min(labelStartClientX, labelCurrentClientX);
+    const maxXClient = Math.max(labelStartClientX, labelCurrentClientX);
+    const minYClient = Math.min(labelStartClientY, labelCurrentClientY);
+    const maxYClient = Math.max(labelStartClientY, labelCurrentClientY);
 
     const affected = [];
     roiElements.forEach(el => {
-      const b = el.getBBox();
-      const bx1 = b.x;
-      const by1 = b.y;
-      const bx2 = b.x + b.width;
-      const by2 = b.y + b.height;
-      const overlap = !(bx2 < minX || bx1 > maxX || by2 < minY || by1 > maxY);
+      const b = el.getBoundingClientRect();
+      const overlap = !(b.right < minXClient || b.left > maxXClient || b.bottom < minYClient || b.top > maxYClient);
       if (overlap) affected.push(el);
     });
 
@@ -782,12 +788,12 @@
       mapInfo.textContent =
         `Map file: ${SVG_FILENAME} · viewBox: ${svgEl.getAttribute("viewBox") || "none"} · W×H: ${svgWidth.toFixed(1)} × ${svgHeight.toFixed(1)}`;
 
-      computeBaseScale();
       viewScale = 1;
       panX = 0;
       panY = 0;
 
       setupRoisFromSvg(svgEl);
+      computeBaseScale();
       centerOnRoiBBox();
 
       hoverInfo.textContent = "SVG loaded. Label mode: click or drag box. Move mode: drag to pan.";
@@ -831,11 +837,12 @@
         const roiId = el.id;
         const labelId = roiAssignments[roiId];
         if (!labelId) {
-          el.style.fill = "#ffffff"; // 无标签：灰 -> 白
+          const base = el.dataset.baseFill || "#d1d5db";
+          el.style.fill = lightenHex(base, 0.28); // 无标签：底色提亮
         } else {
           const label = labels.find(l => l.id === labelId);
           const c = label ? label.color : "#ffffff";
-          el.style.fill = lightenHex(c, 0.7); // 有标签：标签色 -> 淡色
+          el.style.fill = lightenHex(c, 0.5); // 有标签：标签色 -> 淡色
         }
         el.style.strokeWidth = "2.3";
 
@@ -877,6 +884,7 @@
       roiElements.push(el);
     });
 
+    recomputeRoiBBox();
     updateGlobalStats();
   }
 
@@ -908,8 +916,7 @@
       el.classList.remove("roi-labeled");
       return;
     }
-    const {r,g,b} = hexToRgb(label.color);
-    el.style.fill = `rgba(${r}, ${g}, ${b}, 0.85)`;
+    el.style.fill = label.color;
     el.classList.add("roi-labeled");
   }
 
