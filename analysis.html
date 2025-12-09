@@ -416,7 +416,11 @@
 
     if (rows.length) {
       renderMeta();
-      document.getElementById('indexSelector').addEventListener('change', renderAll);
+      const idxSel = document.getElementById('indexSelector');
+      if (indexColumns.length && !idxSel.value) idxSel.value = indexColumns[0];
+      idxSel.addEventListener('change', () => {
+        renderAll();
+      });
       document.getElementById('clusterInput').addEventListener('change', renderAll);
       renderAll();
     } else {
