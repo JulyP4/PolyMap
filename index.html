@@ -1194,7 +1194,7 @@
   }
 
   function buildTemplateCsv(){
-    const intro = "# 请将下面的示例替换为自己的数据：第一列=名称，第二列=label，后续列为自定义 index（可含 z_position）";
+    const intro = "# Replace these sample rows with your own data: column1=id, column2=label from the map, optional z_position, then your custom indices";
     const headers = ["id","label","z_position","index_1","index_2"];
     const labelMap = Object.fromEntries(labels.map(l => [l.id, l.name]));
     const rows = roiElements.slice(0, 2).map((el, idx) => {

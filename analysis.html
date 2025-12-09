@@ -247,11 +247,15 @@
       return arr.map(v => (v-m)/s);
     }
 
-    function pca(features){
-      const vals = features.map(f => rows.map(r => Number(r[f])).filter(v=>!isNaN(v)));
+    function pca(features, dataset = rows){
+      if (features.length < 2) return null;
+      const filtered = dataset.filter(r => features.every(f => !isNaN(Number(r[f]))));
+      if (!filtered.length) return null;
+      const matrix = filtered.map(r => features.map(f => Number(r[f])));
+      const cols = features.map((_, idx) => matrix.map(row => row[idx]));
+      const data = cols.map(col => centerAndScale(col));
       const n = features.length;
-      const len = Math.min(...vals.map(v => v.length));
-      const data = vals.map(v => centerAndScale(v.slice(0,len)));
+      const len = filtered.length;
       const cov = Array.from({length:n}, ()=>Array(n).fill(0));
       for (let i=0;i<n;i++){
         for (let j=i;j<n;j++){
@@ -265,17 +269,17 @@
         vector: Array.from({length:n}, (_,k)=> (k===i?1:0))
       }));
       valsDiag.sort((a,b)=>b.eigen - a.eigen);
-      return {eigvals: valsDiag.map(v=>v.eigen), eigvecs: valsDiag.map(v=>v.vector), len};
+      return {eigvals: valsDiag.map(v=>v.eigen), eigvecs: valsDiag.map(v=>v.vector), len, rows: filtered, features};
     }
 
-    function renderPCA(features, k){
-      if (features.length < 2) return makeCard('PCA', '<div class="text-muted">至少 2 个指数才能做 PCA</div>');
-      const res = pca(features);
+    function renderPCA(features, k, dataset = rows){
+      const res = pca(features, dataset);
+      if (!res || res.len < 2) return makeCard('PCA', '<div class="text-muted">至少 2 个指数才能做 PCA</div>');
       const pc1 = res.eigvecs[0];
       const pc2 = res.eigvecs[1] || res.eigvecs[0];
       const scores = [];
       for (let i=0;i<res.len;i++){
-        const vals = features.map(f => Number(rows[i][f]));
+        const vals = features.map(f => Number(res.rows[i][f]));
         const s1 = vals.reduce((sum,v,idx)=> sum + v*pc1[idx], 0);
         const s2 = vals.reduce((sum,v,idx)=> sum + v*pc2[idx], 0);
         scores.push([s1,s2]);
@@ -295,6 +299,48 @@
       assignments.forEach(a => clusters[a-1].count++);
       const list = clusters.map((c,idx)=>`<div class="text-muted">Cluster ${idx+1}: n=${c.count}</div>`).join('');
       return makeCard('PCA + k-means (scores)', `<div class="tag">PC1/PC2 scores</div>${list}`);
+    }
+
+    function renderLabelCohorts(index){
+      const map = groupBy('label');
+      if (!map.size) return makeCard('Label cohorts', '<div class="text-muted">No label information found.</div>');
+      const rowsHtml = Array.from(map.entries()).map(([label, list]) => {
+        const vals = list.map(r => Number(r[index])).filter(v => !isNaN(v));
+        const q1 = quantile(vals,0.25), med = quantile(vals,0.5), q3 = quantile(vals,0.75);
+        const meanVal = mean(vals);
+        const fmt = v => isNaN(v) ? 'NA' : v.toFixed(3);
+        return `<tr><td>${label}</td><td>${list.length}</td><td>${fmt(meanVal)}</td><td>${fmt(q1)}</td><td>${fmt(med)}</td><td>${fmt(q3)}</td></tr>`;
+      }).join('');
+      const table = `<table><thead><tr><th>Label</th><th>n</th><th>Mean</th><th>Q1</th><th>Median</th><th>Q3</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
+      return makeCard('同标签内部的分布概览', table);
+    }
+
+    function renderCrossLabelMultivariate(){
+      const map = groupBy('label');
+      const labelsOnly = Array.from(map.entries()).filter(([key]) => key !== '(missing)');
+      if (labelsOnly.length < 2) return makeCard('跨标签多指数分析', '<div class="text-muted">至少需要两个标签才能比较。</div>');
+      const aggregated = labelsOnly.map(([label, list]) => {
+        const obj = { label };
+        indexColumns.forEach(idx => {
+          const vals = list.map(r => Number(r[idx])).filter(v => !isNaN(v));
+          obj[idx] = vals.length ? mean(vals) : NaN;
+        });
+        return obj;
+      });
+      const usable = indexColumns.filter(idx => aggregated.some(a => !isNaN(a[idx])));
+      if (usable.length < 2) return makeCard('跨标签多指数分析', '<div class="text-muted">需要至少两个可用的 index 才能进行多维比较。</div>');
+      const res = pca(usable, aggregated);
+      if (!res) return makeCard('跨标签多指数分析', '<div class="text-muted">数据不足以运行 PCA。</div>');
+      const pc1 = res.eigvecs[0];
+      const pc2 = res.eigvecs[1] || res.eigvecs[0];
+      const scores = res.rows.map(row => {
+        const vals = usable.map(f => Number(row[f]));
+        const s1 = vals.reduce((sum,v,idx)=> sum + v*pc1[idx], 0);
+        const s2 = vals.reduce((sum,v,idx)=> sum + v*pc2[idx], 0);
+        return { label: row.label, s1, s2 };
+      });
+      const list = scores.map(s => `<div class="text-muted">${s.label}: PC1=${s.s1.toFixed(3)}, PC2=${s.s2.toFixed(3)}</div>`).join('');
+      return makeCard('跨标签多指数分析 (标签均值 PCA)', `<div class="tag">标签 → 指数均值 → PCA</div>${list}`);
     }
 
     function renderModuleScores(features){
@@ -326,11 +372,13 @@
       const index = document.getElementById('indexSelector').value || indexColumns[0];
       const bins = Number(document.getElementById('binInput').value) || 10;
       const k = Number(document.getElementById('clusterInput').value) || 3;
+      grid.appendChild(renderLabelCohorts(index));
       grid.appendChild(renderQC(index));
       grid.appendChild(renderDistributions(index));
       grid.appendChild(renderGrouped(index));
       grid.appendChild(renderGradient(index, bins));
       grid.appendChild(renderCorrelation(indexColumns.slice(0,10)));
+      grid.appendChild(renderCrossLabelMultivariate());
       grid.appendChild(renderPCA(indexColumns, k));
       grid.appendChild(renderModuleScores(indexColumns));
     }
