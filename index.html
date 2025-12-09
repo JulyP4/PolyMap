@@ -404,12 +404,17 @@
         <input type="file" id="dataFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
         <div class="hint">
           每行一条数据（细胞/区域），<strong>第一列是名称</strong>，<strong>第二列是 label</strong>（来自 map），后面是任意数量的 index 列。<br/>
-          可选：添加 <strong>z_position</strong>（用于梯度分析）或其他元数据列。<br/>
+          可选：添加 <strong>z_position</strong> 或其他元数据列（不再做梯度分箱）。<br/>
           示例模板的首行是说明，第二行起为表头：<code>id,label,index_1,index_2,...</code>
         </div>
         <div class="data-actions">
           <button class="button small" id="downloadTemplateBtn">Download template from labels</button>
           <button class="button small primary" id="openAnalysisBtn">Open analysis workspace</button>
+        </div>
+        <div class="row" style="margin-top:0.35rem;">
+          <select id="heatmapIndexSelector"></select>
+          <button class="button small" id="applyHeatmapBtn">Apply map heatmap</button>
+          <button class="button small" id="clearHeatmapBtn">Reset map colors</button>
         </div>
         <div id="dataStatus" class="data-status" style="margin-top:0.4rem;">No data table loaded.</div>
       </div>
@@ -495,6 +500,9 @@
   const downloadTemplateBtn = document.getElementById("downloadTemplateBtn");
   const openAnalysisBtn     = document.getElementById("openAnalysisBtn");
   const dataStatus          = document.getElementById("dataStatus");
+  const heatmapIndexSelector= document.getElementById("heatmapIndexSelector");
+  const applyHeatmapBtn     = document.getElementById("applyHeatmapBtn");
+  const clearHeatmapBtn     = document.getElementById("clearHeatmapBtn");
 
   const addLabelBtn       = document.getElementById("addLabelBtn");
   const labelNameInput    = document.getElementById("labelNameInput");
@@ -509,6 +517,7 @@
   const defaultColors = ["#ef4444","#f97316","#facc15","#22c55e","#14b8a6",
                          "#0ea5e9","#6366f1","#8b5cf6","#ec4899","#f97373"];
   let colorIndex = 0;
+  let activeHeatmap = null;
 
   const SVG_FILENAME = "Vector image_ blank root.svg";
 
@@ -1169,6 +1178,31 @@
     return obj;
   }
 
+  function computeLabelMeans(index){
+    const agg = new Map();
+    cellTable.forEach(r => {
+      const label = (r.label || "").trim();
+      const v = Number(r[index]);
+      if (!label || isNaN(v)) return;
+      if (!agg.has(label)) agg.set(label, {sum:0,count:0});
+      const obj = agg.get(label);
+      obj.sum += v; obj.count += 1;
+    });
+    const entries = Array.from(agg.entries()).map(([label, obj]) => ({ label, value: obj.sum / (obj.count || 1) }));
+    if (!entries.length) return null;
+    const values = entries.map(e => e.value);
+    const min = Math.min(...values), max = Math.max(...values);
+    return { entries, min, max };
+  }
+
+  function valueToHeatColor(val, min, max){
+    const t = (val - min) / ((max - min) || 1);
+    const r = Math.round(255 * t);
+    const b = Math.round(255 * (1 - t));
+    const g = Math.round(150 + 80 * (0.5 - Math.abs(t - 0.5)));
+    return `rgb(${r},${g},${b})`;
+  }
+
   function loadDataFromFile(file){
     const reader = new FileReader();
     reader.onload = (ev) => {
@@ -1177,6 +1211,7 @@
         tableColumns = header;
         const indices = deriveIndexColumns(header);
         cellTable = rows.map(r => coerceRow(r, indices));
+        populateHeatmapSelector(indices);
         const labelSet = Array.from(new Set(cellTable.map(r => r.label).filter(Boolean)));
         const metaCols = header.filter(h => !deriveIndexColumns([h]).length && h !== "id" && h !== "label");
         updateDataStatus("Data table loaded", {
@@ -1193,8 +1228,20 @@
     reader.readAsText(file);
   }
 
+  function populateHeatmapSelector(indices){
+    heatmapIndexSelector.innerHTML = "";
+    indices.forEach(idx => {
+      const opt = document.createElement("option");
+      opt.value = idx; opt.textContent = idx; heatmapIndexSelector.appendChild(opt);
+    });
+    const disabled = !indices.length;
+    heatmapIndexSelector.disabled = disabled;
+    applyHeatmapBtn.disabled = disabled;
+    clearHeatmapBtn.disabled = disabled;
+  }
+
   function buildTemplateCsv(){
-    const intro = "# Replace these sample rows with your own data: column1=id, column2=label from the map, optional z_position, then your custom indices";
+    const intro = "# Replace sample rows with your data: column1=id, column2=label from the map, optional z_position, then custom indices";
     const headers = ["id","label","z_position","index_1","index_2"];
     const labelMap = Object.fromEntries(labels.map(l => [l.id, l.name]));
     const rows = roiElements.slice(0, 2).map((el, idx) => {
@@ -1251,14 +1298,45 @@
     window.open("analysis.html", "root-analysis" + Date.now());
   }
 
+  function activateHeatmap(){
+    if (!cellTable.length) {
+      alert("Load a table first.");
+      return;
+    }
+    const index = heatmapIndexSelector.value;
+    if (!index) {
+      alert("Select an index to visualize.");
+      return;
+    }
+    const stats = computeLabelMeans(index);
+    if (!stats) {
+      alert("No numeric values for this index.");
+      return;
+    }
+    const colorMap = new Map(stats.entries.map(e => [e.label, valueToHeatColor(e.value, stats.min, stats.max)]));
+    activeHeatmap = { index, stats, colorMap };
+    updateDataStatus(`Heatmap on map by index: ${index}`);
+    refreshAllRoisAppearance();
+  }
+
+  function clearHeatmap(){
+    activeHeatmap = null;
+    refreshAllRoisAppearance();
+    updateDataStatus("Map heatmap cleared. Label colors restored.");
+  }
+
   dataFileInput.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
     loadDataFromFile(file);
   });
 
+  populateHeatmapSelector([]);
+
   downloadTemplateBtn.addEventListener("click", downloadTemplateFromLabels);
   openAnalysisBtn.addEventListener("click", createAnalysisWindow);
+  applyHeatmapBtn.addEventListener("click", activateHeatmap);
+  clearHeatmapBtn.addEventListener("click", clearHeatmap);
 
   addLabelBtn.addEventListener("click", () => {
     const name = labelNameInput.value.trim();
