@@ -585,18 +585,30 @@
     baseScale = Math.min(scaleByWidth, scaleByHeight);
   }
 
-  function updateSvgTransform(){
-    if (!svgEl) return;
+  function getTransformInfo(scaleOverride = viewScale){
     const rect = svgViewport.getBoundingClientRect();
-    const scale = baseScale * viewScale;
+    const scale = baseScale * scaleOverride;
     const contentMinX = roiBBox ? roiBBox.minX : 0;
     const contentMinY = roiBBox ? roiBBox.minY : 0;
     const contentWidth = roiBBox ? roiBBox.width : svgWidth;
     const contentHeight = roiBBox ? roiBBox.height : svgHeight;
     const cx = contentMinX + contentWidth / 2;
     const cy = contentMinY + contentHeight / 2;
-    const tx = rect.width / 2 - cx * scale + panX;
-    const ty = rect.height / 2 - cy * scale + panY;
+    const baseTx = rect.width / 2 - cx * scale;
+    const baseTy = rect.height / 2 - cy * scale;
+    return {
+      rect,
+      scale,
+      tx: baseTx + panX,
+      ty: baseTy + panY,
+      baseTx,
+      baseTy
+    };
+  }
+  
+  function updateSvgTransform(){
+    if (!svgEl) return;
+    const { tx, ty, scale } = getTransformInfo();
     svgContainer.style.transformOrigin = "top left";
     svgContainer.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
   }
@@ -610,10 +622,7 @@
   }
 
   function clientToSvg(clientX, clientY){
-    const rect = svgViewport.getBoundingClientRect();
-    const scale = baseScale * viewScale;
-    const tx = (rect.width - svgWidth * scale) / 2 + panX;
-    const ty = (rect.height - svgHeight * scale) / 2 + panY;
+    const { rect, scale, tx, ty } = getTransformInfo();
     const x = (clientX - rect.left - tx) / scale;
     const y = (clientY - rect.top - ty) / scale;
     return { x, y };
@@ -622,27 +631,22 @@
   svgViewport.addEventListener("wheel", (e) => {
     if (!svgEl) return;
     e.preventDefault();
-    const rect = svgViewport.getBoundingClientRect();
+    const { rect, scale: oldScale, tx: txOld, ty: tyOld, baseTx, baseTy } = getTransformInfo();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const oldScale = baseScale * viewScale;
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
     let newViewScale = viewScale * factor;
     newViewScale = Math.max(0.2, Math.min(6, newViewScale));
-    const newScale = baseScale * newViewScale;
-
-    const txOld = (rect.width - svgWidth * oldScale) / 2 + panX;
-    const tyOld = (rect.height - svgHeight * oldScale) / 2 + panY;
-
+    const newInfo = getTransformInfo(newViewScale);
     const imgX = (mouseX - txOld) / oldScale;
     const imgY = (mouseY - tyOld) / oldScale;
 
-    const txNew = mouseX - imgX * newScale;
-    const tyNew = mouseY - imgY * newScale;
+    const txNew = mouseX - imgX * newInfo.scale;
+    const tyNew = mouseY - imgY * newInfo.scale;
 
-    panX = txNew - (rect.width - svgWidth * newScale) / 2;
-    panY = tyNew - (rect.height - svgHeight * newScale) / 2;
+    panX = txNew - newInfo.baseTx;
+    panY = tyNew - newInfo.baseTy;
     viewScale = newViewScale;
     updateSvgTransform();
   }, { passive: false });
