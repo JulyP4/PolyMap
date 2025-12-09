@@ -403,9 +403,9 @@
         <label for="dataFileInput">Load per-cell table (CSV/TSV)</label>
         <input type="file" id="dataFileInput" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
         <div class="hint">
-          Each row is one ROI with metadata and unlimited indices.<br/>
-          Required columns: <strong>roi_id</strong>, <strong>label</strong>, <strong>z_position</strong>.<br/>
-          Optional metadata: zone, layer, treatment, batch, x, y.
+          每行一条数据（细胞/区域），<strong>第一列是名称</strong>，<strong>第二列是 label</strong>（来自 map），后面是任意数量的 index 列。<br/>
+          可选：添加 <strong>z_position</strong>（用于梯度分析）或其他元数据列。<br/>
+          示例模板的首行是说明，第二行起为表头：<code>id,label,index_1,index_2,...</code>
         </div>
         <div class="data-actions">
           <button class="button small" id="downloadTemplateBtn">Download template from labels</button>
@@ -1120,7 +1120,7 @@
 
   // ----------- 数据表 & 分析入口 -----------
   function deriveIndexColumns(cols){
-    const meta = new Set(["roi_id","label","zone","layer","treatment","batch","z_position","x","y"]);
+    const meta = new Set(["id","label","zone","layer","treatment","batch","z_position","x","y"]);
     return cols.filter(c => !meta.has(c));
   }
 
@@ -1144,7 +1144,10 @@
 
   function parseDataText(text){
     const delimiter = detectDelimiter(text);
-    const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+    const lines = text
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l.length && !l.startsWith("#"));
     if (!lines.length) throw new Error("Empty file");
     const header = lines.shift().split(delimiter).map(h => h.trim());
     const rows = lines.map(line => {
@@ -1175,7 +1178,7 @@
         const indices = deriveIndexColumns(header);
         cellTable = rows.map(r => coerceRow(r, indices));
         const labelSet = Array.from(new Set(cellTable.map(r => r.label).filter(Boolean)));
-        const metaCols = header.filter(h => !deriveIndexColumns([h]).length && h !== "roi_id" && h !== "label");
+        const metaCols = header.filter(h => !deriveIndexColumns([h]).length && h !== "id" && h !== "label");
         updateDataStatus("Data table loaded", {
           rows: cellTable.length,
           labels: labelSet,
@@ -1191,11 +1194,11 @@
   }
 
   function buildTemplateCsv(){
-    const headers = ["roi_id","label","zone","layer","treatment","batch","z_position","x","y",
-                    "index_density","index_bundling","index_connectivity","index_branching","index_anisotropy"];
+    const intro = "# 请将下面的示例替换为自己的数据：第一列=名称，第二列=label，后续列为自定义 index（可含 z_position）";
+    const headers = ["id","label","z_position","index_1","index_2"];
     const labelMap = Object.fromEntries(labels.map(l => [l.id, l.name]));
-    const rows = roiElements.map(el => {
-      const roiId = el.id;
+    const rows = roiElements.slice(0, 2).map((el, idx) => {
+      const roiId = el.id || `cell_${idx + 1}`;
       const labelId = roiAssignments[roiId];
       const labelName = labelId ? (labelMap[labelId] || labelId) : "";
       return [
@@ -1203,19 +1206,14 @@
         labelName,
         "",
         "",
-        "",
-        "",
-        0,
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
         ""
       ].join(",");
     });
-    return headers.join(",") + "\n" + rows.join("\n");
+    if (!rows.length) {
+      rows.push(["cell_1","label_A","","",""].join(","));
+      rows.push(["cell_2","label_B","","",""].join(","));
+    }
+    return [intro, headers.join(","), ...rows].join("\n");
   }
 
   function downloadTemplateFromLabels(){
