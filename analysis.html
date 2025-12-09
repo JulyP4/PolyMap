@@ -51,9 +51,6 @@
         <label>Choose index
           <select id="indexSelector"></select>
         </label>
-        <label>Bins along z
-          <input type="number" id="binInput" min="3" max="50" value="10" />
-        </label>
         <label>k for clustering
           <input type="number" id="clusterInput" min="2" max="12" value="3" />
         </label>
@@ -178,33 +175,6 @@
       return makeCard('按 zone/layer/treatment 盒须信息', tables);
     }
 
-    function renderGradient(index, bins){
-      const zVals = rows.map(r => Number(r.z_position)).filter(v => !isNaN(v));
-      if (!zVals.length) return makeCard('梯度分析', '<div class="text-muted">z_position 缺失</div>');
-      const min = Math.min(...zVals), max = Math.max(...zVals);
-      const step = (max-min || 1)/bins;
-      const series = Array.from({length:bins}, (_,i)=>({
-        bin: i+1,
-        start: min + i*step,
-        end: min + (i+1)*step,
-        values: []
-      }));
-      rows.forEach(r => {
-        const z = Number(r.z_position);
-        const v = Number(r[index]);
-        if (isNaN(z) || isNaN(v)) return;
-        const idx = Math.min(bins-1, Math.floor((z-min)/step));
-        series[idx].values.push(v);
-      });
-      const points = series.map(s => ({
-        bin: s.bin,
-        mean: s.values.length ? mean(s.values) : NaN
-      }));
-      const spark = points.map(p => isNaN(p.mean)?'' : `${p.bin},${p.mean.toFixed(3)}`).filter(Boolean).join(' | ');
-      const list = series.map(s => `<div class="text-muted">Bin ${s.bin} (${s.start.toFixed(2)}-${s.end.toFixed(2)}): n=${s.values.length}, mean=${s.values.length?mean(s.values).toFixed(3):'NA'}</div>`).join('');
-      return makeCard('沿根轴梯度 (z binned)', `<div class="tag">${spark}</div>${list}`);
-    }
-
     function correlationMatrix(features){
       const n = features.length;
       const vals = features.map(f => rows.map(r => Number(r[f])).filter(v=>!isNaN(v)));
@@ -239,6 +209,28 @@
         }
       }
       return makeCard('相关矩阵 (前 10 个指数)', `<div class="heatmap" style="grid-template-columns: repeat(${features.length}, 1fr);">${cells.join('')}</div>`);
+    }
+
+    function renderIndexNetwork(features){
+      const use = features.slice(0,6);
+      if (use.length < 2) return makeCard('指数关联网络', '<div class="text-muted">至少两个指数才能连线。</div>');
+      const mat = correlationMatrix(use);
+      const radius = 65, cx = 110, cy = 90;
+      const pos = use.map((_,i)=>{
+        const angle = (2*Math.PI*i)/use.length;
+        return { x: cx + radius*Math.cos(angle), y: cy + radius*Math.sin(angle) };
+      });
+      const edges = [];
+      for (let i=0;i<use.length;i++){
+        for (let j=i+1;j<use.length;j++){
+          const v = mat[i][j];
+          if (Math.abs(v) < 0.35) continue;
+          const opacity = Math.min(1, Math.abs(v));
+          edges.push(`<line x1="${pos[i].x}" y1="${pos[i].y}" x2="${pos[j].x}" y2="${pos[j].y}" stroke="${v>0?'#22c55e':'#ef4444'}" stroke-width="${2+3*Math.abs(v)}" stroke-opacity="${opacity}" />`);
+        }
+      }
+      const nodes = use.map((label,i)=>`<g><circle cx="${pos[i].x}" cy="${pos[i].y}" r="10" fill="#0ea5e9" /><text x="${pos[i].x}" y="${pos[i].y+4}" text-anchor="middle" font-size="10" fill="#e5e7eb">${label}</text></g>`).join('');
+      return makeCard('指数关联网络', `<svg width="220" height="190" style="background:#0b1530;border:1px solid #1f2937;border-radius:6px;">${edges.join('')}${nodes}</svg>`);
     }
 
     function centerAndScale(arr){
@@ -297,8 +289,19 @@
       });
       const clusters = Array.from({length:k}, ()=>({count:0}));
       assignments.forEach(a => clusters[a-1].count++);
+      const xs = scores.map(s => s[0]);
+      const ys = scores.map(s => s[1]);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      const scaleX = (v)=> ((v - minX)/((maxX-minX)||1))*200 + 10;
+      const scaleY = (v)=> ((v - minY)/((maxY-minY)||1))*140 + 10;
+      const palette = ['#60a5fa','#34d399','#f472b6','#fbbf24','#a78bfa','#f97316'];
+      const dots = scores.map((s,idx)=>{
+        const c = palette[(assignments[idx]-1)%palette.length];
+        return `<circle cx="${scaleX(s[0])}" cy="${scaleY(s[1])}" r="4" fill="${c}" fill-opacity="0.75" />`;
+      }).join('');
       const list = clusters.map((c,idx)=>`<div class="text-muted">Cluster ${idx+1}: n=${c.count}</div>`).join('');
-      return makeCard('PCA + k-means (scores)', `<div class="tag">PC1/PC2 scores</div>${list}`);
+      return makeCard('PCA + k-means (scores)', `<svg width="240" height="170" style="background:#0b1530;border:1px solid #1f2937;border-radius:6px;">${dots}</svg>${list}`);
     }
 
     function renderLabelCohorts(index){
@@ -313,6 +316,29 @@
       }).join('');
       const table = `<table><thead><tr><th>Label</th><th>n</th><th>Mean</th><th>Q1</th><th>Median</th><th>Q3</th></tr></thead><tbody>${rowsHtml}</tbody></table>`;
       return makeCard('同标签内部的分布概览', table);
+    }
+
+    function renderLabelBars(index){
+      const map = groupBy('label');
+      if (!map.size) return makeCard('Label means (chart)', '<div class="text-muted">No label information found.</div>');
+      const stats = Array.from(map.entries()).map(([label,list]) => {
+        const vals = list.map(r => Number(r[index])).filter(v=>!isNaN(v));
+        return { label, mean: mean(vals), n: vals.length };
+      }).filter(d => !isNaN(d.mean));
+      if (!stats.length) return makeCard('Label means (chart)', '<div class="text-muted">No numeric values.</div>');
+      const maxVal = Math.max(...stats.map(s => s.mean));
+      const bars = stats.sort((a,b)=>b.mean-a.mean).map(s => {
+        const w = maxVal ? (s.mean / maxVal) * 100 : 0;
+        return `<div style="display:flex;align-items:center;gap:0.4rem;margin:0.2rem 0;">
+          <div style="width:80px;">${s.label}</div>
+          <div style="flex:1;background:#0b1530;border:1px solid #1f2937;border-radius:6px;overflow:hidden;">
+            <div style="width:${w}%;height:10px;background:linear-gradient(90deg,#3b82f6,#22d3ee);"></div>
+          </div>
+          <div class="text-muted" style="width:60px;">${s.mean.toFixed(3)}</div>
+          <div class="text-muted" style="width:50px;">n=${s.n}</div>
+        </div>`;
+      }).join('');
+      return makeCard('Label means (chart)', bars);
     }
 
     function renderCrossLabelMultivariate(){
@@ -343,6 +369,39 @@
       return makeCard('跨标签多指数分析 (标签均值 PCA)', `<div class="tag">标签 → 指数均值 → PCA</div>${list}`);
     }
 
+    function renderLabelIndexHeatmap(){
+      const map = groupBy('label');
+      const labels = Array.from(map.keys()).filter(l => l !== '(missing)').slice(0,8);
+      const indices = indexColumns.slice(0,6);
+      if (!labels.length || !indices.length) return makeCard('Label × index heatmap', '<div class="text-muted">需要标签与指数。</div>');
+      const cells = [];
+      let globalMin = Infinity, globalMax = -Infinity;
+      const gridData = labels.map(lbl => {
+        const rowsList = map.get(lbl) || [];
+        const vals = indices.map(idx => {
+          const arr = rowsList.map(r => Number(r[idx])).filter(v=>!isNaN(v));
+          const m = arr.length ? mean(arr) : NaN;
+          if (!isNaN(m)) { globalMin = Math.min(globalMin, m); globalMax = Math.max(globalMax, m); }
+          return m;
+        });
+        return { label: lbl, vals };
+      });
+      const scale = (v) => {
+        if (!isFinite(globalMin) || !isFinite(globalMax)) return '#111827';
+        if (isNaN(v)) return '#111827';
+        const t = (v - globalMin)/((globalMax-globalMin)||1);
+        const r = Math.round(255*t);
+        const b = Math.round(255*(1-t));
+        return `rgb(${r},${Math.round(120+60*t)},${b})`;
+      };
+      gridData.forEach(row => {
+        cells.push(`<div class="heat-cell" style="background:#0b1530;font-weight:600;">${row.label}</div>`);
+        row.vals.forEach(v => cells.push(`<div class="heat-cell" style="background:${scale(v)};">${isNaN(v)?'NA':v.toFixed(2)}</div>`));
+      });
+      const header = ['Label', ...indices].map(t => `<div class="heat-cell" style="background:#0b1530;font-weight:600;">${t}</div>`).join('');
+      return makeCard('Label × index heatmap', `<div class="heatmap" style="grid-template-columns: repeat(${indices.length+1},1fr);">${header}${cells.join('')}</div>`);
+    }
+
     function renderModuleScores(features){
       const modules = [
         ['Density','Bundling'],
@@ -370,14 +429,15 @@
         return;
       }
       const index = document.getElementById('indexSelector').value || indexColumns[0];
-      const bins = Number(document.getElementById('binInput').value) || 10;
       const k = Number(document.getElementById('clusterInput').value) || 3;
       grid.appendChild(renderLabelCohorts(index));
+      grid.appendChild(renderLabelBars(index));
       grid.appendChild(renderQC(index));
       grid.appendChild(renderDistributions(index));
       grid.appendChild(renderGrouped(index));
-      grid.appendChild(renderGradient(index, bins));
+      grid.appendChild(renderLabelIndexHeatmap());
       grid.appendChild(renderCorrelation(indexColumns.slice(0,10)));
+      grid.appendChild(renderIndexNetwork(indexColumns));
       grid.appendChild(renderCrossLabelMultivariate());
       grid.appendChild(renderPCA(indexColumns, k));
       grid.appendChild(renderModuleScores(indexColumns));
@@ -386,7 +446,6 @@
     if (rows.length) {
       renderMeta();
       document.getElementById('indexSelector').addEventListener('change', renderAll);
-      document.getElementById('binInput').addEventListener('change', renderAll);
       document.getElementById('clusterInput').addEventListener('change', renderAll);
       renderAll();
     } else {
