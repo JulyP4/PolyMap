@@ -125,6 +125,36 @@
       return { entries, min, max };
     }
 
+    function computeMapLabelMeans(index){
+      const defs = payload?.map?.labels || [];
+      if (!defs.length) return computeLabelMeans(index);
+      const byLabel = new Map();
+      defs.forEach(d => {
+        const key = (d.name || d.id || '').trim();
+        if (key) byLabel.set(key, { id: d.id, name: key, vals: [] });
+      });
+      rows.forEach(r => {
+        const lbl = (r.label || '').trim();
+        if (!lbl) return;
+        byLabel.forEach((entry, key) => {
+          if (lbl === key || lbl === entry.id) {
+            const v = Number(r[index]);
+            if (!isNaN(v)) entry.vals.push(v);
+          }
+        });
+      });
+      const entries = Array.from(byLabel.values()).map(e => ({
+        id: e.id,
+        label: e.name,
+        mean: mean(e.vals),
+        n: e.vals.length
+      })).filter(e => !isNaN(e.mean));
+      if (!entries.length) return null;
+      const min = Math.min(...entries.map(e => e.mean));
+      const max = Math.max(...entries.map(e => e.mean));
+      return { entries, min, max };
+    }
+
     function makeCard(title, content){
       const div = document.createElement('div');
       div.className = 'card';
@@ -368,7 +398,7 @@
         host.innerHTML = '';
         return;
       }
-      const stats = computeLabelMeans(index);
+      const stats = computeMapLabelMeans(index);
       if (!stats){
         status.textContent = 'No numeric values for this index.';
         host.innerHTML = '';
@@ -381,7 +411,11 @@
         return;
       }
       const labelMap = new Map((payload.map.labels||[]).map(l => [l.id, l]));
-      const valueMap = new Map(stats.entries.map(e => [e.label, e.mean]));
+      const valueMap = new Map();
+      stats.entries.forEach(e => {
+        valueMap.set(e.label, e.mean);
+        if (e.id) valueMap.set(e.id, e.mean);
+      });
       host.querySelectorAll('path').forEach(p => {
         const roiId = p.id;
         const labId = payload.map.assignments?.[roiId];
