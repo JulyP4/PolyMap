@@ -597,14 +597,9 @@
 
   function centerOnRoiBBox(){
     if (!roiElements.length || !roiBBox) return;
-    const rect = svgViewport.getBoundingClientRect();
-    const scale = baseScale * viewScale;
-    const cx = (roiBBox.minX + roiBBox.maxX) / 2;
-    const cy = (roiBBox.minY + roiBBox.maxY) / 2;
-
-    // 让 ROI 中心对齐到视口中心
-    panX = rect.width / 2 - cx * scale;
-    panY = rect.height / 2 - cy * scale;
+    // Reset pan so updateSvgTransform can center the ROI bounds itself
+    panX = 0;
+    panY = 0;
     updateSvgTransform();
   }
 
@@ -848,8 +843,7 @@
         const roiId = el.id;
         const labelId = roiAssignments[roiId];
         if (!labelId) {
-          const base = el.dataset.baseFill || "#d1d5db";
-          el.style.fill = lightenHex(base, 0.28); // 无标签：底色提亮
+          el.style.fill = "#ffffff"; // 无标签：保持纯白
         } else {
           const label = labels.find(l => l.id === labelId);
           const c = label ? label.color : "#ffffff";
