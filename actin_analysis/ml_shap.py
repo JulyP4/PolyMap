@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 
 plt.style.use("ggplot")
 
@@ -41,6 +42,9 @@ def run_ml_shap(
     X = df[feature_cols].values
     y = df[label_col].values
 
+    encoder = LabelEncoder()
+    y_encoded = encoder.fit_transform(y)
+
     n_samples = len(df)
     n_classes = len(np.unique(y))
     min_test_fraction = n_classes / max(n_samples, 1)
@@ -57,15 +61,19 @@ def run_ml_shap(
     try:
         X_train, X_test, y_train, y_test = train_test_split(
             X,
-            y,
+            y_encoded,
             test_size=adjusted_test_size,
             random_state=random_state,
-            stratify=y,
+            stratify=y_encoded,
         )
     except ValueError:
         # Fall back to non-stratified split if class counts are too small.
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=adjusted_test_size, random_state=random_state, stratify=None
+            X,
+            y_encoded,
+            test_size=adjusted_test_size,
+            random_state=random_state,
+            stratify=None,
         )
 
     clf = XGBClassifier(
@@ -80,12 +88,20 @@ def run_ml_shap(
     clf.fit(X_train, y_train)
 
     preds = clf.predict(X_test)
+    class_labels = list(encoder.classes_)
+    class_indices = list(range(len(class_labels)))
+
     acc = accuracy_score(y_test, preds)
-    report = classification_report(y_test, preds)
+    report = classification_report(
+        y_test, preds, labels=class_indices, target_names=class_labels
+    )
 
     with open(outdir / "ml_metrics.txt", "w") as f:
         f.write(f"Accuracy: {acc:.3f}\n\n")
         f.write(report)
+        f.write("\nLabel encoding:\n")
+        for idx, name in zip(class_indices, class_labels):
+            f.write(f"{idx}: {name}\n")
 
     explainer = shap.TreeExplainer(clf)
     shap_values = explainer.shap_values(X_train)
