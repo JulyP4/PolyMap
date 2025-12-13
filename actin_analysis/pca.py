@@ -1,3 +1,11 @@
+"""Principal component analysis utilities for actin indices.
+
+The functions here standardize numeric features, run PCA, and save scatter
+plots, explained-variance curves, and loading tables. Outputs are intended to be
+written to a dedicated subfolder (e.g. ``analysis_output/pca``) supplied by the
+caller.
+"""
+
 from pathlib import Path
 from typing import Iterable, Tuple
 

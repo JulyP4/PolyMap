@@ -1,3 +1,11 @@
+"""Plotting utilities for actin index exploration.
+
+This module focuses on quick univariate and pairwise visualisations: histograms,
+violin plots, correlation heatmaps, and radar profiles. Callers are encouraged
+to pass subdirectories (e.g. ``analysis_output/univariate``) so different plot
+families remain neatly separated on disk.
+"""
+
 from pathlib import Path
 from typing import Iterable
 
