@@ -37,7 +37,7 @@ def _compute_graph(embeddings: np.ndarray, n_neighbors: int = 10) -> nx.Graph:
 
 
 def _pseudotime_from_graph(G: nx.Graph, start: int = 0) -> np.ndarray:
-    lengths = nx.shortest_path_length(G, source=start, weight="weight")
+    lengths = dict(nx.shortest_path_length(G, source=start, weight="weight"))
     max_len = max(lengths.values()) if len(lengths) else 1.0
     pt = np.array([lengths.get(i, 0.0) / max_len for i in range(len(G))])
     return pt
