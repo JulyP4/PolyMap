@@ -1,0 +1,22 @@
+# Replace these sample rows with your own data: column1=id, column2=label from the map, then your custom indices,,,,
+id,label,index_1,index_2,index_3,index_4,index_5
+id_1,Label 1,1,1,8,12,1
+id_2,Label 1,1,2,7,32,2
+id_3,Label 1,1,1,9,22,1
+id_4,Label 1,2,4,8,32,1
+id_5,Label 2,2,2,7,11,4
+id_6,Label 2,2,3,7,13,4
+id_7,Label 2,3,7,6,15,5
+id_8,Label 2,3,5,7,11,6
+id_9,Label 3,3,6,5,9,3
+id_10,Label 3,4,8,4,6,8
+id_11,Label 3,4,6,6,10,6
+id_12,Label 3,5,9,4,6,9
+id_13,Label 3,2,11,2,7,9
+id_14,Label 4,4,7,4,18,7
+id_15,Label 4,7,7,4,22,6
+id_16,Label 4,6,8,3,21,6
+id_17,Label 4,6,12,1,16,3
+id_18,Label 5,6,12,2,24,2
+id_19,Label 5,9,8,2,34,1
+id_20,Label 5,7,9,3,31,1
