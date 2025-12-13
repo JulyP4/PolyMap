@@ -1,3 +1,11 @@
+"""Per-feature statistical tests across labels.
+
+The helpers here run one-way ANOVA and Kruskal–Wallis tests for each index and
+write results into a tidy CSV per feature. They expect the caller to provide a
+dedicated output directory (e.g. ``analysis_output/per_index_tests``) so files
+stay organised alongside other analyses.
+"""
+
 from pathlib import Path
 from typing import Iterable, Optional
 

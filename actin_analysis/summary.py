@@ -1,3 +1,11 @@
+"""Descriptive summaries for per-cell actin index tables.
+
+This module produces quick-look CSVs for global and per-label distributions so
+downstream notebooks and scripts can reuse consistent aggregates. Each output
+is meant to live inside a dedicated subfolder (e.g. ``analysis_output/summary``)
+created by the caller.
+"""
+
 from pathlib import Path
 from typing import Iterable, Tuple
 
