@@ -2,7 +2,8 @@
 
 This module compares multivariate index profiles across labels using MANOVA
 and visualises group separation via LDA. Results are written into a dedicated
-subdirectory (``<outdir>/manova_lda``) created by the caller.
+subdirectory (``<outdir>/manova_lda``) created by the caller and styled for
+publication-quality reporting.
 
 Outputs
 -------
@@ -22,7 +23,14 @@ import seaborn as sns
 
 from actin_analysis.advanced_common import standardize_features
 
-plt.style.use("ggplot")
+from actin_analysis.plot_style import (
+    apply_scientific_theme,
+    format_heatmap_axes,
+    format_legend,
+    save_figure,
+)
+
+apply_scientific_theme()
 
 
 def run_manova(df: pd.DataFrame, label_col: str, feature_cols, outdir: Path) -> pd.DataFrame:
@@ -69,7 +77,7 @@ def run_lda(df: pd.DataFrame, label_col: str, feature_cols, outdir: Path):
     proj_df[label_col] = y
 
     if proj.shape[1] >= 2:
-        fig, ax = plt.subplots(figsize=(6, 5))
+        fig, ax = plt.subplots(figsize=(6.2, 5.2))
         sns.scatterplot(
             data=proj_df,
             x="LD1",
@@ -82,9 +90,8 @@ def run_lda(df: pd.DataFrame, label_col: str, feature_cols, outdir: Path):
             ax=ax,
         )
         ax.set_title("LDA: LD1 vs LD2")
-        fig.tight_layout()
-        fig.savefig(outdir / "lda_scatter.png", dpi=300)
-        plt.close(fig)
+        format_legend(ax, labels=proj_df[label_col].unique())
+        save_figure(fig, outdir / "lda_scatter.png")
 
     n_comp = proj.shape[1]
     # ``lda.scalings_`` always has ``n_classes - 1`` columns; slice to the
@@ -103,9 +110,8 @@ def run_lda(df: pd.DataFrame, label_col: str, feature_cols, outdir: Path):
     )
     sns.heatmap(loadings, annot=True, fmt=".2f", cmap="coolwarm", center=0, ax=ax)
     ax.set_title("LDA loadings")
-    fig.tight_layout()
-    fig.savefig(outdir / "lda_loadings_heatmap.png", dpi=300)
-    plt.close(fig)
+    format_heatmap_axes(ax, loadings.columns, loadings.index)
+    save_figure(fig, outdir / "lda_loadings_heatmap.png")
 
 
 __all__ = ["run_manova", "run_lda"]

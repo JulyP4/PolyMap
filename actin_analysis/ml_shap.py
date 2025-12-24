@@ -2,7 +2,8 @@
 
 This module trains a gradient boosting model to predict labels from actin
 indices, reports performance, and computes SHAP values for interpretability.
-Results are saved under ``<outdir>/ml_shap``.
+Figures and summaries are formatted using a publication-ready style and saved
+under ``<outdir>/ml_shap``.
 """
 
 from pathlib import Path
@@ -14,7 +15,9 @@ from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-plt.style.use("ggplot")
+from actin_analysis.plot_style import apply_scientific_theme, save_figure
+
+apply_scientific_theme()
 
 
 def run_ml_shap(
@@ -107,9 +110,8 @@ def run_ml_shap(
     shap_values = explainer.shap_values(X_train)
 
     shap.summary_plot(shap_values, X_train, feature_names=feature_cols, show=False)
-    plt.tight_layout()
-    plt.savefig(outdir / "shap_summary.png", dpi=300)
-    plt.close()
+    fig = plt.gcf()
+    save_figure(fig, outdir / "shap_summary.png")
 
     shap.summary_plot(
         shap_values,
@@ -118,9 +120,8 @@ def run_ml_shap(
         plot_type="bar",
         show=False,
     )
-    plt.tight_layout()
-    plt.savefig(outdir / "shap_importance_bar.png", dpi=300)
-    plt.close()
+    fig = plt.gcf()
+    save_figure(fig, outdir / "shap_importance_bar.png")
 
     importance = pd.Series(clf.feature_importances_, index=feature_cols)
     importance.sort_values(ascending=False).to_csv(outdir / "xgb_feature_importance.csv")

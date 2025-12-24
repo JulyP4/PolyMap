@@ -1,8 +1,9 @@
 """Partial-correlation index networks for actin measurements.
 
 This module builds a Gaussian graphical model (Graphical Lasso) from the index
-matrix to highlight conditionally dependent relationships among indices. Outputs
-live under ``<outdir>/index_networks``.
+matrix to highlight conditionally dependent relationships among indices. The
+resulting heatmaps use a shared scientific style and size heuristics to keep
+labels readable in dense matrices. Outputs live under ``<outdir>/index_networks``.
 """
 
 from pathlib import Path
@@ -13,7 +14,13 @@ import pandas as pd
 import seaborn as sns
 from sklearn.covariance import GraphicalLassoCV
 
-plt.style.use("ggplot")
+from actin_analysis.plot_style import (
+    apply_scientific_theme,
+    format_heatmap_axes,
+    save_figure,
+)
+
+apply_scientific_theme()
 
 
 def run_index_network(df: pd.DataFrame, feature_cols, outdir: Path):
@@ -34,9 +41,8 @@ def run_index_network(df: pd.DataFrame, feature_cols, outdir: Path):
     )
     sns.heatmap(partial_df, cmap="coolwarm", center=0, vmin=-1, vmax=1, ax=ax)
     ax.set_title("Partial correlation network (Graphical Lasso)")
-    fig.tight_layout()
-    fig.savefig(outdir / "partial_corr_heatmap.png", dpi=300)
-    plt.close(fig)
+    format_heatmap_axes(ax, feature_cols, feature_cols)
+    save_figure(fig, outdir / "partial_corr_heatmap.png")
 
 
 __all__ = ["run_index_network"]

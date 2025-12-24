@@ -2,8 +2,11 @@
 
 This module centralises file handling so scripts can assume a consistent
 interface for loading ``per_cell_template.csv``-style data and creating output
-folders. Key behaviours:
+folders. It also supports optional JSON schemas for renaming and excluding
+features, keeping pipelines reproducible and metadata-aware.
 
+Key behaviours
+-------------
 * Lines beginning with ``#`` in the CSV are treated as comments (mirroring the
   provided template header) and automatically skipped.
 * :func:`ensure_outdir` makes sure nested output directories exist before we

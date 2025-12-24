@@ -2,7 +2,8 @@
 
 This module fits per-index mixed models to partition variance between fixed
 effects (e.g., zone/label) and random effects (e.g., plant/root IDs). Outputs
-are saved under ``<outdir>/mixed_effects``.
+include per-index model summaries and information criteria tables saved under
+``<outdir>/mixed_effects`` for downstream reporting.
 """
 
 from pathlib import Path

@@ -1,10 +1,11 @@
 """Utilities for multidimensional actin analysis.
 
-This package groups the reusable pieces that power ``actin_multidim_analysis``:
-I/O helpers, descriptive statistics, plotting, PCA, and a suite of advanced
-pipelines (MANOVA/LDA, pseudotime, clustering, index networks, mixed-effects
-models, ML+SHAP). Each module writes outputs to caller-provided subdirectories
-so figures and tables stay neatly organised on disk.
+This package groups the reusable components that power
+``actin_multidim_analysis``. It includes I/O helpers, descriptive statistics,
+publication-ready plotting utilities, PCA routines, and advanced pipelines
+(MANOVA/LDA, pseudotime, clustering, index networks, mixed-effects models,
+ML+SHAP). Each module writes outputs to caller-provided subdirectories so
+figures and tables stay neatly organised for downstream reporting.
 """
 
 from .io import ensure_outdir, load_per_cell_table

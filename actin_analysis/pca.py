@@ -1,9 +1,9 @@
 """Principal component analysis utilities for actin indices.
 
-The functions here standardize numeric features, run PCA, and save scatter
-plots, explained-variance curves, and loading tables. Outputs are intended to be
-written to a dedicated subfolder (e.g. ``analysis_output/pca``) supplied by the
-caller.
+This module standardizes numeric features, runs PCA, and saves publication-
+ready figures and tables. Outputs include scatter plots for the leading
+components, explained-variance summaries, and loading heatmaps, all formatted
+using the shared scientific plotting style.
 """
 
 from pathlib import Path
@@ -16,7 +16,14 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-plt.style.use("ggplot")
+from actin_analysis.plot_style import (
+    apply_scientific_theme,
+    format_legend,
+    format_heatmap_axes,
+    save_figure,
+)
+
+apply_scientific_theme()
 
 
 def run_pca(
@@ -38,7 +45,7 @@ def run_pca(
 
     # Scatter PC1 vs PC2
     if pcs.shape[1] >= 2:
-        fig, ax = plt.subplots(figsize=(5, 4))
+        fig, ax = plt.subplots(figsize=(5.5, 4.2))
         sns.scatterplot(
             data=pca_df,
             x="PC1",
@@ -51,20 +58,17 @@ def run_pca(
         ax.set_title("PCA of indices (PC1 vs PC2)")
         ax.axhline(0, color="gray", linewidth=0.5)
         ax.axvline(0, color="gray", linewidth=0.5)
-        fig.tight_layout()
-        fig.savefig(outdir / "pca_pc1_pc2_scatter.png", dpi=300)
-        plt.close(fig)
+        format_legend(ax, labels=pca_df[label_col].unique())
+        save_figure(fig, outdir / "pca_pc1_pc2_scatter.png")
 
     # Explained variance ratio
     evr = pca.explained_variance_ratio_
-    fig, ax = plt.subplots(figsize=(4, 3))
+    fig, ax = plt.subplots(figsize=(4.8, 3.4))
     ax.bar(range(1, len(evr) + 1), evr * 100)
     ax.set_xlabel("Principal component")
     ax.set_ylabel("Explained variance (%)")
     ax.set_title("PCA explained variance")
-    fig.tight_layout()
-    fig.savefig(outdir / "pca_explained_variance.png", dpi=300)
-    plt.close(fig)
+    save_figure(fig, outdir / "pca_explained_variance.png")
 
     # Loadings heatmap (indices vs PCs)
     loadings = pd.DataFrame(
@@ -77,9 +81,8 @@ def run_pca(
     )
     sns.heatmap(loadings, annot=True, fmt=".2f", cmap="coolwarm", center=0, ax=ax)
     ax.set_title("PCA loadings (contribution of each index)")
-    fig.tight_layout()
-    fig.savefig(outdir / "pca_loadings_heatmap.png", dpi=300)
-    plt.close(fig)
+    format_heatmap_axes(ax, pc_cols, feature_list)
+    save_figure(fig, outdir / "pca_loadings_heatmap.png")
 
     loadings.to_csv(outdir / "pca_loadings.csv")
     pca_df.to_csv(outdir / "pca_scores.csv", index=False)
