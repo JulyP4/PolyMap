@@ -13,10 +13,36 @@ folders. Key behaviours:
 """
 
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+
+def load_schema(schema_path: Optional[Path]) -> Dict[str, object]:
+    """Load an optional JSON schema that describes feature metadata."""
+
+    if schema_path is None:
+        return {}
+
+    if not schema_path.exists():
+        raise FileNotFoundError(f"Schema file not found: {schema_path}")
+
+    data = pd.read_json(schema_path, typ="series")
+    if not isinstance(data, pd.Series):
+        raise ValueError("Schema JSON must decode to a JSON object.")
+    return data.to_dict()
+
+
+def apply_schema_renames(df: pd.DataFrame, schema: Dict[str, object]) -> pd.DataFrame:
+    """Apply optional column renames from schema."""
+
+    rename_map = schema.get("feature_rename", {})
+    if not isinstance(rename_map, dict):
+        raise ValueError("Schema 'feature_rename' must be a JSON object.")
+    if rename_map:
+        df = df.rename(columns=rename_map)
+    return df
 
 
 def ensure_outdir(outdir: Path) -> None:
@@ -26,7 +52,10 @@ def ensure_outdir(outdir: Path) -> None:
 
 
 def load_per_cell_table(
-    csv_path: Path, label_col: str = "label"
+    csv_path: Path,
+    label_col: str = "label",
+    schema_path: Optional[Path] = None,
+    include_non_normalized: bool = False,
 ) -> Tuple[pd.DataFrame, Optional[str], str, List[str]]:
     """
     Load the per-cell table while preserving key metadata.
@@ -39,6 +68,10 @@ def load_per_cell_table(
         CSV file with columns: id, label, index_1, index_2, ...
     label_col:
         Name of the label column.
+    schema_path:
+        Optional JSON schema for renaming or excluding features.
+    include_non_normalized:
+        Whether to keep non-normalized features listed in the schema.
 
     Returns
     -------
@@ -48,6 +81,10 @@ def load_per_cell_table(
     """
 
     df = pd.read_csv(csv_path, comment="#")
+    schema = load_schema(schema_path)
+    df = apply_schema_renames(df, schema)
+
+    label_col = schema.get("label_col", label_col)
     if label_col not in df.columns:
         raise ValueError(f"Column '{label_col}' not found. Columns: {df.columns.tolist()}")
 
@@ -55,16 +92,34 @@ def load_per_cell_table(
     df = df.dropna(axis=1, how="all")
 
     # Infer id column (optional)
-    id_col = None
-    for col in df.columns:
-        if col.lower() in {"id", "cell_id", "roi_id"}:
-            id_col = col
-            break
+    id_col = schema.get("id_col")
+    if id_col is not None and id_col not in df.columns:
+        raise ValueError(f"Schema id_col '{id_col}' not found in columns.")
+    if id_col is None:
+        for col in df.columns:
+            if col.lower() in {"id", "cell_id", "roi_id"}:
+                id_col = col
+                break
 
     # Feature columns = all numeric columns except id
     feature_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     if id_col is not None and id_col in feature_cols:
         feature_cols.remove(id_col)
+    if label_col in feature_cols:
+        feature_cols.remove(label_col)
+
+    exclude_features = schema.get("exclude_features", [])
+    if not isinstance(exclude_features, list):
+        raise ValueError("Schema 'exclude_features' must be a JSON array.")
+    non_normalized = schema.get("non_normalized_features", [])
+    if not isinstance(non_normalized, list):
+        raise ValueError("Schema 'non_normalized_features' must be a JSON array.")
+
+    exclude_set = set(exclude_features)
+    if not include_non_normalized:
+        exclude_set.update(non_normalized)
+    if exclude_set:
+        feature_cols = [col for col in feature_cols if col not in exclude_set]
 
     if not feature_cols:
         raise ValueError("No numeric index columns found.")
