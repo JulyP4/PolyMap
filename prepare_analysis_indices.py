@@ -40,6 +40,7 @@ METRIC_GROUPS = {
 }
 
 NON_NORMALIZED = [
+    "nsi_total_length",
     "nsi_total_element",
     "nsi_total_node",
     "nsi_total_graph_theoretic_branch",
@@ -52,7 +53,6 @@ DEFAULT_RENAME_MAP = {
     "diameter_sdt (PU)": "diameter_sdt",
     "segment_density (/PU of filament)": "segment_density",
     "branching_act(/PU of filament)": "branching_activity",
-    "nsi_total_length": "total_length",
 }
 
 
