@@ -2,7 +2,8 @@
 
 This module embeds cells in a low-dimensional space, infers a principal tree
 using minimum spanning tree + shortest paths, and assigns a pseudotime score to
-each cell. Outputs are saved into ``<outdir>/pseudotime``.
+each cell. The visual outputs are formatted for publication-quality reporting
+and saved into ``<outdir>/pseudotime``.
 
 Outputs
 -------
@@ -21,8 +22,9 @@ import seaborn as sns
 from sklearn.neighbors import NearestNeighbors
 
 from actin_analysis.advanced_common import standardize_features
+from actin_analysis.plot_style import apply_scientific_theme, format_legend, save_figure
 
-plt.style.use("ggplot")
+apply_scientific_theme()
 
 
 def _compute_graph(embeddings: np.ndarray, n_neighbors: int = 10) -> nx.Graph:
@@ -83,20 +85,32 @@ def run_pseudotime(
     out[label_col] = df[label_col].values
     out.to_csv(outdir / "pseudotime_scores.csv", index=False)
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sc = ax.scatter(out["UMAP1"], out["UMAP2"], c=pseudotime, cmap="viridis", s=30)
+    fig, ax = plt.subplots(figsize=(6.2, 5.2))
+    sc = ax.scatter(
+        out["UMAP1"],
+        out["UMAP2"],
+        c=pseudotime,
+        cmap="viridis",
+        s=32,
+        alpha=0.85,
+    )
     ax.set_title("UMAP embedding coloured by pseudotime")
     fig.colorbar(sc, ax=ax, label="pseudotime")
-    fig.tight_layout()
-    fig.savefig(outdir / "pseudotime_scatter.png", dpi=300)
-    plt.close(fig)
+    save_figure(fig, outdir / "pseudotime_scatter.png")
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sns.scatterplot(data=out, x="UMAP1", y="UMAP2", hue=label_col, s=35, ax=ax)
+    fig, ax = plt.subplots(figsize=(6.2, 5.2))
+    sns.scatterplot(
+        data=out,
+        x="UMAP1",
+        y="UMAP2",
+        hue=label_col,
+        s=34,
+        alpha=0.85,
+        ax=ax,
+    )
     ax.set_title("UMAP embedding coloured by label")
-    fig.tight_layout()
-    fig.savefig(outdir / "pseudotime_by_label.png", dpi=300)
-    plt.close(fig)
+    format_legend(ax, labels=out[label_col].unique())
+    save_figure(fig, outdir / "pseudotime_by_label.png")
 
 
 __all__ = ["run_pseudotime"]

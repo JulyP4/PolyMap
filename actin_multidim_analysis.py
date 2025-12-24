@@ -1,12 +1,14 @@
 """End-to-end multidimensional analysis for per-cell actin index tables.
 
-Run this script against a ``per_cell_template.csv``-style file to generate a
-fully organised results tree. Outputs are grouped into logical subfolders so
-basic summaries, multivariate models, and advanced analyses stay tidy:
+This command-line entry point orchestrates the full analytical workflow used in
+actin-index studies. It takes a ``per_cell_template.csv``-style table, validates
+the schema, and then writes a structured results tree with publication-quality
+figures and statistical summaries. Outputs are grouped into logical subfolders
+so basic summaries, multivariate models, and advanced analyses stay tidy:
 
 * ``summary/`` – global and per-label descriptive tables.
 * ``per_index_tests/`` – ANOVA and Kruskal–Wallis results per index.
-* ``univariate/`` – histograms and violin plots.
+* ``univariate/`` – histograms and violin plots with density overlays.
 * ``correlation/`` – correlation heatmap and matrix.
 * ``pca/`` – PCA scatter, explained variance, and loadings.
 * ``profiles/`` – per-label radar plots (when feature count is manageable).
@@ -14,7 +16,8 @@ basic summaries, multivariate models, and advanced analyses stay tidy:
   networks, mixed-effects models, and ML+SHAP interpretations.
 
 All directories are created automatically; each plotting/statistics module just
-needs the folder path to write its own figures and tables.
+needs the folder path to write its own figures and tables. This script is the
+recommended entry point for reproducible reporting workflows.
 """
 
 import argparse

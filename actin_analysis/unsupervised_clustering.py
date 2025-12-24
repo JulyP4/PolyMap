@@ -1,8 +1,9 @@
 """Unsupervised clustering of actin index profiles.
 
 This module performs UMAP embedding followed by HDBSCAN (density-based)
-clustering and reports how clusters map onto the provided label column.
-Outputs are written to ``<outdir>/clustering``.
+clustering and reports how clusters map onto the provided label column. The
+visualisations follow a consistent scientific style to avoid label crowding and
+to produce publication-ready scatter plots.
 """
 
 from pathlib import Path
@@ -13,8 +14,9 @@ import seaborn as sns
 from sklearn.metrics import adjusted_rand_score
 
 from actin_analysis.advanced_common import standardize_features
+from actin_analysis.plot_style import apply_scientific_theme, format_legend, save_figure
 
-plt.style.use("ggplot")
+apply_scientific_theme()
 
 
 def run_clustering(
@@ -54,19 +56,34 @@ def run_clustering(
     with open(outdir / "clustering_metrics.txt", "w") as f:
         f.write(f"Adjusted Rand Index vs {label_col}: {ari:.3f}\n")
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sns.scatterplot(data=out, x="UMAP1", y="UMAP2", hue="cluster", palette="tab20", s=30, ax=ax)
+    fig, ax = plt.subplots(figsize=(6.2, 5.2))
+    sns.scatterplot(
+        data=out,
+        x="UMAP1",
+        y="UMAP2",
+        hue="cluster",
+        palette="tab20",
+        s=32,
+        alpha=0.8,
+        ax=ax,
+    )
     ax.set_title("UMAP + HDBSCAN clusters")
-    fig.tight_layout()
-    fig.savefig(outdir / "clusters_scatter.png", dpi=300)
-    plt.close(fig)
+    format_legend(ax, labels=out["cluster"].unique())
+    save_figure(fig, outdir / "clusters_scatter.png")
 
-    fig, ax = plt.subplots(figsize=(6, 5))
-    sns.scatterplot(data=out, x="UMAP1", y="UMAP2", hue=label_col, s=30, ax=ax)
+    fig, ax = plt.subplots(figsize=(6.2, 5.2))
+    sns.scatterplot(
+        data=out,
+        x="UMAP1",
+        y="UMAP2",
+        hue=label_col,
+        s=32,
+        alpha=0.8,
+        ax=ax,
+    )
     ax.set_title("UMAP coloured by label")
-    fig.tight_layout()
-    fig.savefig(outdir / "umap_by_label.png", dpi=300)
-    plt.close(fig)
+    format_legend(ax, labels=out[label_col].unique())
+    save_figure(fig, outdir / "umap_by_label.png")
 
 
 __all__ = ["run_clustering"]

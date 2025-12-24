@@ -1,7 +1,8 @@
 """Per-feature statistical tests across labels.
 
 The helpers here run one-way ANOVA and Kruskal–Wallis tests for each index and
-write results into a tidy CSV per feature. They expect the caller to provide a
+write results into a tidy CSV per feature. The routine is intended for broad
+screening of label-driven differences and expects the caller to provide a
 dedicated output directory (e.g. ``analysis_output/per_index_tests``) so files
 stay organised alongside other analyses.
 """
