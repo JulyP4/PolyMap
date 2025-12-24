@@ -52,6 +52,17 @@ def main():
         help="Name of the label column (default: 'label')",
     )
     parser.add_argument(
+        "--schema",
+        type=str,
+        default=None,
+        help="Optional JSON schema defining feature metadata and exclusions",
+    )
+    parser.add_argument(
+        "--include-non-normalized",
+        action="store_true",
+        help="Include non-normalized features listed in the schema",
+    )
+    parser.add_argument(
         "--outdir",
         type=str,
         default="analysis_output",
@@ -69,8 +80,12 @@ def main():
     outdir = Path(args.outdir)
     ensure_outdir(outdir)
 
+    schema_path = Path(args.schema) if args.schema else None
     df, id_col, label_col, feature_cols = load_per_cell_table(
-        csv_path, label_col=args.label_col
+        csv_path,
+        label_col=args.label_col,
+        schema_path=schema_path,
+        include_non_normalized=args.include_non_normalized,
     )
     print(f"Loaded {len(df)} rows.")
     print(f"Label column: {label_col}")
