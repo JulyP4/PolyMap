@@ -373,7 +373,7 @@
       <div class="section">
         <div class="section-title">1. Root map (SVG)</div>
         <div class="hint">
-          This page always uses <strong>Vector image_ blank root.svg</strong> in the same folder.<br/>
+          This page always uses <strong>Vector_image_blank_hypocotyl_root.svg</strong> in the same folder.<br/>
           The SVG geometry is never changed; only labels are added on top.
         </div>
         <div id="mapInfo" class="status-line"></div>
@@ -434,7 +434,7 @@
     <div id="svgViewport">
       <div id="svgContainer">
         <div id="emptyState" class="empty-state">
-          Loading <strong>Vector image_ blank root.svg</strong>…
+          Loading <strong>Vector_image_blank_hypocotyl_root.svg</strong>…
         </div>
       </div>
       <div id="boxOverlay"></div>
@@ -510,7 +510,7 @@
                          "#0ea5e9","#6366f1","#8b5cf6","#ec4899","#f97373"];
   let colorIndex = 0;
 
-  const SVG_FILENAME = "Vector image_ blank root.svg";
+  const SVG_FILENAME = "Vector_image_blank_hypocotyl_root.svg";
 
   let svgEl = null;
   let svgWidth = 0, svgHeight = 0;
@@ -866,7 +866,7 @@
       const styleAttr = el.getAttribute("style") || "";
       if (styleAttr.includes("stroke:none")) return;
 
-      const baseFill = "#c2c6cf"; // 更灰一点
+      const baseFill = "#c2c6cf";
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
       el.style.stroke = "#000000";
