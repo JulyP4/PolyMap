@@ -808,31 +808,6 @@
   });
 
   // ----------- SVG 加载 & ROI 初始化 -----------
-  function normalizeViewBoxToRois(){
-    if (!svgEl || !roiBBox) return;
-    const padX = roiBBox.width * 0.05;
-    const padY = roiBBox.height * 0.05;
-    const x = roiBBox.minX - padX;
-    const y = roiBBox.minY - padY;
-    const width = roiBBox.width + padX * 2;
-    const height = roiBBox.height + padY * 2;
-    svgEl.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
-  }
-
-  function updateSvgDimensionsFromViewBox(){
-    const vbAttr = svgEl.getAttribute("viewBox");
-    if (vbAttr) {
-      const parts = vbAttr.split(/[\s,]+/).map(parseFloat);
-      svgWidth  = parts[2];
-      svgHeight = parts[3];
-    } else {
-      const bbox = svgEl.getBBox();
-      svgWidth  = bbox.width;
-      svgHeight = bbox.height;
-    }
-    svgEl.setAttribute("width", svgWidth);
-    svgEl.setAttribute("height", svgHeight);
-  }
 
   async function loadSvgMap(){
     try {
