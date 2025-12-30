@@ -808,6 +808,21 @@
   });
 
   // ----------- SVG 加载 & ROI 初始化 -----------
+  function normalizeViewBoxToContent(){
+    if (!svgEl) return;
+    const bbox = svgEl.getBBox();
+    if (!bbox || !isFinite(bbox.width) || !isFinite(bbox.height) || !bbox.width || !bbox.height) {
+      return;
+    }
+    const padX = bbox.width * 0.05;
+    const padY = bbox.height * 0.05;
+    const x = bbox.x - padX;
+    const y = bbox.y - padY;
+    const width = bbox.width + padX * 2;
+    const height = bbox.height + padY * 2;
+    svgEl.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
+  }
+
   async function loadSvgMap(){
     try {
       const resp = await fetch(SVG_FILENAME);
@@ -822,6 +837,7 @@
       }
       emptyState.style.display = "none";
 
+      normalizeViewBoxToContent();
       const vbAttr = svgEl.getAttribute("viewBox");
       if (vbAttr) {
         const parts = vbAttr.split(/[\s,]+/).map(parseFloat);
