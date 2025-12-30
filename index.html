@@ -808,6 +808,7 @@
   });
 
   // ----------- SVG 加载 & ROI 初始化 -----------
+
   async function loadSvgMap(){
     try {
       const resp = await fetch(SVG_FILENAME);
@@ -870,7 +871,7 @@
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
       el.style.stroke = "#000000";
-      el.style.strokeWidth = "1.6";
+      el.style.strokeWidth = "0.9";
       el.style.strokeLinejoin = "round";
       el.style.strokeLinecap = "round";
       el.style.vectorEffect = "non-scaling-stroke";
@@ -883,7 +884,7 @@
 
       el.addEventListener("mouseenter", () => {
         el.classList.add("roi-hover");
-        el.dataset.baseStrokeWidth = el.style.strokeWidth || "1.6";
+        el.dataset.baseStrokeWidth = el.style.strokeWidth || "0.9";
         const roiId = el.id;
         const labelId = roiAssignments[roiId];
         if (!labelId) {
@@ -893,7 +894,7 @@
           const c = label ? label.color : "#ffffff";
           el.style.fill = lightenHex(c, 0.5); // 有标签：标签色 -> 淡色
         }
-        el.style.strokeWidth = "2.3";
+        el.style.strokeWidth = "1.4";
 
         const currentLabelId = roiAssignments[roiId];
         const labelName = currentLabelId
