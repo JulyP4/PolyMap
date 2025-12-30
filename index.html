@@ -808,19 +808,30 @@
   });
 
   // ----------- SVG 加载 & ROI 初始化 -----------
-  function normalizeViewBoxToContent(){
-    if (!svgEl) return;
-    const bbox = svgEl.getBBox();
-    if (!bbox || !isFinite(bbox.width) || !isFinite(bbox.height) || !bbox.width || !bbox.height) {
-      return;
-    }
-    const padX = bbox.width * 0.05;
-    const padY = bbox.height * 0.05;
-    const x = bbox.x - padX;
-    const y = bbox.y - padY;
-    const width = bbox.width + padX * 2;
-    const height = bbox.height + padY * 2;
+  function normalizeViewBoxToRois(){
+    if (!svgEl || !roiBBox) return;
+    const padX = roiBBox.width * 0.05;
+    const padY = roiBBox.height * 0.05;
+    const x = roiBBox.minX - padX;
+    const y = roiBBox.minY - padY;
+    const width = roiBBox.width + padX * 2;
+    const height = roiBBox.height + padY * 2;
     svgEl.setAttribute("viewBox", `${x} ${y} ${width} ${height}`);
+  }
+
+  function updateSvgDimensionsFromViewBox(){
+    const vbAttr = svgEl.getAttribute("viewBox");
+    if (vbAttr) {
+      const parts = vbAttr.split(/[\s,]+/).map(parseFloat);
+      svgWidth  = parts[2];
+      svgHeight = parts[3];
+    } else {
+      const bbox = svgEl.getBBox();
+      svgWidth  = bbox.width;
+      svgHeight = bbox.height;
+    }
+    svgEl.setAttribute("width", svgWidth);
+    svgEl.setAttribute("height", svgHeight);
   }
 
   async function loadSvgMap(){
@@ -837,19 +848,9 @@
       }
       emptyState.style.display = "none";
 
-      normalizeViewBoxToContent();
-      const vbAttr = svgEl.getAttribute("viewBox");
-      if (vbAttr) {
-        const parts = vbAttr.split(/[\s,]+/).map(parseFloat);
-        svgWidth  = parts[2];
-        svgHeight = parts[3];
-      } else {
-        const bbox = svgEl.getBBox();
-        svgWidth  = bbox.width;
-        svgHeight = bbox.height;
-      }
-      svgEl.setAttribute("width", svgWidth);
-      svgEl.setAttribute("height", svgHeight);
+      setupRoisFromSvg(svgEl);
+      normalizeViewBoxToRois();
+      updateSvgDimensionsFromViewBox();
 
       mapInfo.textContent =
         `Map file: ${SVG_FILENAME} · viewBox: ${svgEl.getAttribute("viewBox") || "none"} · W×H: ${svgWidth.toFixed(1)} × ${svgHeight.toFixed(1)}`;
@@ -858,7 +859,6 @@
       panX = 0;
       panY = 0;
 
-      setupRoisFromSvg(svgEl);
       computeBaseScale();
       centerOnRoiBBox();
 
@@ -886,7 +886,7 @@
       el.dataset.baseFill = baseFill;
       el.style.fill = baseFill;
       el.style.stroke = "#000000";
-      el.style.strokeWidth = "1.6";
+      el.style.strokeWidth = "0.9";
       el.style.strokeLinejoin = "round";
       el.style.strokeLinecap = "round";
       el.style.vectorEffect = "non-scaling-stroke";
@@ -899,7 +899,7 @@
 
       el.addEventListener("mouseenter", () => {
         el.classList.add("roi-hover");
-        el.dataset.baseStrokeWidth = el.style.strokeWidth || "1.6";
+        el.dataset.baseStrokeWidth = el.style.strokeWidth || "0.9";
         const roiId = el.id;
         const labelId = roiAssignments[roiId];
         if (!labelId) {
@@ -909,7 +909,7 @@
           const c = label ? label.color : "#ffffff";
           el.style.fill = lightenHex(c, 0.5); // 有标签：标签色 -> 淡色
         }
-        el.style.strokeWidth = "2.3";
+        el.style.strokeWidth = "1.4";
 
         const currentLabelId = roiAssignments[roiId];
         const labelName = currentLabelId
