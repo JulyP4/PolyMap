@@ -1,0 +1,58 @@
+{
+  "label_col": "label",
+  "id_col": "id",
+  "exclude_features": [
+    "file_path",
+    "k1",
+    "k2"
+  ],
+  "non_normalized_features": [
+    "nsi_total_element",
+    "nsi_total_node",
+    "nsi_total_graph_theoretic_branch"
+  ],
+  "include_non_normalized": false,
+  "feature_rename": {
+    "linear_density (PU/PU^2)": "linear_density",
+    "diameter_tdt (PU)": "diameter_tdt",
+    "diameter_sdt (PU)": "diameter_sdt",
+    "segment_density (/PU of filament)": "segment_density",
+    "branching_act(/PU of filament)": "branching_activity",
+    "nsi_total_length": "total_length",
+    "nsi_total_element": "total_element",
+    "nsi_total_node": "total_node",
+    "nsi_total_graph_theoretic_branch": "total_graph_theoretic_branch"
+  },
+  "feature_groups": {
+    "Density": [
+      "occupancy",
+      "linear_density"
+    ],
+    "Bundling": [
+      "skewness",
+      "cv",
+      "diameter_tdt",
+      "diameter_sdt"
+    ],
+    "Connectivity": [
+      "segment_density"
+    ],
+    "Branching": [
+      "branching_activity"
+    ],
+    "Directionality": [
+      "anisotropy"
+    ]
+  },
+  "label_map": {
+    "Lifeact-cotyleden": "PC",
+    "Lifeact-hypocotyl/Lifeact-DMSO 12h base": "Btm",
+    "Lifeact-hypocotyl/Lifeact-DMSO 12h mid": "Mid",
+    "Lifeact-hypocotyl/Lifeact-DMSO 12h upper": "Top",
+    "Lifeact-root/differentation": "DZ",
+    "Lifeact-root/elongation": "EZ",
+    "Lifeact-root/meristem": "MZ",
+    "Lifeact-root/transition": "TZ",
+    "Lifeact-roothair": "RT"
+  }
+}

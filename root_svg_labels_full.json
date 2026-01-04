@@ -4,7 +4,7 @@
   "labels": [
     {
       "id": "L1",
-      "name": "GC",
+      "name": "PC",
       "color": "#ef4444"
     },
     {
@@ -44,7 +44,7 @@
     },
     {
       "id": "L9",
-      "name": "RH",
+      "name": "RT",
       "color": "#ec4899"
     }
   ],

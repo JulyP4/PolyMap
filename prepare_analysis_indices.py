@@ -15,15 +15,15 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 FOLDER_KEY_MAP = {
-    "Lifeact-cotyleden": "cotyledon",
-    "Lifeact-hypocotyl/Lifeact-DMSO 12h base": "hypocotyl_base",
-    "Lifeact-hypocotyl/Lifeact-DMSO 12h mid": "hypocotyl_mid",
-    "Lifeact-hypocotyl/Lifeact-DMSO 12h upper": "hypocotyl_upper",
-    "Lifeact-root/differentation": "root_differentiation",
-    "Lifeact-root/elongation": "root_elongation",
-    "Lifeact-root/meristem": "root_meristem",
-    "Lifeact-root/transition": "root_transition",
-    "Lifeact-roothair": "root_hair",
+    "Lifeact-cotyleden": "PC",
+    "Lifeact-hypocotyl/Lifeact-DMSO 12h base": "Btm",
+    "Lifeact-hypocotyl/Lifeact-DMSO 12h mid": "Mid",
+    "Lifeact-hypocotyl/Lifeact-DMSO 12h upper": "Top",
+    "Lifeact-root/differentation": "DZ",
+    "Lifeact-root/elongation": "EZ",
+    "Lifeact-root/meristem": "MZ",
+    "Lifeact-root/transition": "TZ",
+    "Lifeact-roothair": "RT",
 }
 
 METRIC_GROUPS = {
@@ -40,10 +40,10 @@ METRIC_GROUPS = {
 }
 
 NON_NORMALIZED = [
-    "nsi_total_length",
-    "nsi_total_element",
-    "nsi_total_node",
-    "nsi_total_graph_theoretic_branch",
+    "total_length",
+    "total_element",
+    "total_node",
+    "total_graph_theoretic_branch",
 ]
 
 EXCLUDE_COLUMNS = {"k1", "k2", "file_path"}
@@ -53,6 +53,10 @@ DEFAULT_RENAME_MAP = {
     "diameter_sdt (PU)": "diameter_sdt",
     "segment_density (/PU of filament)": "segment_density",
     "branching_act(/PU of filament)": "branching_activity",
+    "nsi_total_length": "total_length",
+    "nsi_total_element": "total_element",
+    "nsi_total_node": "total_node",
+    "nsi_total_graph_theoretic_branch": "total_graph_theoretic_branch"
 }
 
 
