@@ -1,50 +1,50 @@
 {
   "version": 4,
-  "mapFile": "Vector_image_blank_hypocotyl_root.svg",
+  "mapFile": "Vector_image_blank_cotyledon_hypocotyl_root.svg",
   "labels": [
     {
       "id": "L1",
-      "name": "cotyledon",
+      "name": "GC",
       "color": "#ef4444"
     },
     {
       "id": "L2",
-      "name": "hypocotyl_base",
+      "name": "Btm",
       "color": "#f97316"
     },
     {
       "id": "L3",
-      "name": "hypocotyl_mid",
+      "name": "Mid",
       "color": "#facc15"
     },
     {
       "id": "L4",
-      "name": "hypocotyl_upper",
+      "name": "Top",
       "color": "#22c55e"
     },
     {
       "id": "L5",
-      "name": "root_differentiation",
+      "name": "DZ",
       "color": "#14b8a6"
     },
     {
       "id": "L6",
-      "name": "root_elongation",
+      "name": "EZ",
       "color": "#0ea5e9"
     },
     {
       "id": "L7",
-      "name": "root_meristem",
+      "name": "MZ",
       "color": "#6366f1"
     },
     {
       "id": "L8",
-      "name": "root_transition",
+      "name": "TZ",
       "color": "#8b5cf6"
     },
     {
       "id": "L9",
-      "name": "root_hair",
+      "name": "RH",
       "color": "#ec4899"
     }
   ],
@@ -173,7 +173,28 @@
     "path422": "L8",
     "path420": "L8",
     "path418": "L8",
-    "path406": "L8"
+    "path406": "L8",
+    "path53": "L1",
+    "path61": "L1",
+    "path63": "L1",
+    "path79": "L1",
+    "path85": "L1",
+    "path87": "L1",
+    "path89": "L1",
+    "path99": "L1",
+    "path73": "L1",
+    "path71": "L1",
+    "path75": "L1",
+    "path69": "L1",
+    "path65": "L1",
+    "path95": "L1",
+    "path93": "L1",
+    "path91": "L1",
+    "path81": "L1",
+    "path55": "L1",
+    "path59": "L1",
+    "path57": "L1",
+    "path83": "L1"
   },
-  "timestamp": "2025-12-30T08:00:42.982Z"
+  "timestamp": "2026-01-04T06:41:14.142Z"
 }
