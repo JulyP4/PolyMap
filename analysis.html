@@ -41,6 +41,8 @@
     .map-frame svg { width:100%; height:auto; display:block; }
     .legend { display:flex; align-items:center; gap:0.4rem; margin-top:0.4rem; font-size:0.8rem; color:var(--muted); }
     .legend-bar { flex:1; height:10px; background:linear-gradient(90deg, #1e3a8a, #22d3ee, #f59e0b, #ef4444); border-radius:999px; border:1px solid var(--border); }
+    .analysis-stack { display:flex; flex-direction:column; gap:0.8rem; }
+    .panel .panel-body { margin-top:0.4rem; }
   </style>
 </head>
 <body>
@@ -59,11 +61,43 @@
         <label>k for clustering
           <input type="number" id="clusterInput" min="2" max="12" value="3" />
         </label>
+        <label>Map palette
+          <select id="colorScale"></select>
+        </label>
       </div>
       <div class="info-list" id="metaBadges"></div>
     </section>
-    <section class="panel" id="analysisPanel">
-      <div id="analysisGrid" class="grid"></div>
+    <section class="analysis-stack" id="analysisPanel">
+      <section class="panel" id="summaryPanel">
+        <h3>Summary</h3>
+        <small>描述性统计与标签分组概览</small>
+        <div class="panel-body" id="summaryBody"></div>
+      </section>
+      <section class="panel" id="testsPanel">
+        <h3>Per-index tests</h3>
+        <small>单因素 ANOVA（按 label 分组）</small>
+        <div class="panel-body" id="testsBody"></div>
+      </section>
+      <section class="panel" id="univariatePanel">
+        <h3>Univariate distribution</h3>
+        <small>当前 index 的直方图与分位数</small>
+        <div class="panel-body" id="univariateBody"></div>
+      </section>
+      <section class="panel" id="correlationPanel">
+        <h3>Correlation</h3>
+        <small>指数相关矩阵</small>
+        <div class="panel-body" id="correlationBody"></div>
+      </section>
+      <section class="panel" id="pcaPanel">
+        <h3>PCA + clustering</h3>
+        <small>多指标降维与聚类概览</small>
+        <div class="panel-body" id="pcaBody"></div>
+      </section>
+      <section class="panel" id="profilePanel">
+        <h3>Label profiles</h3>
+        <small>标签 × 指数 heatmap</small>
+        <div class="panel-body" id="profileBody"></div>
+      </section>
     </section>
     <section class="panel" id="mapPanel">
       <h3>Map heatmap</h3>
@@ -84,13 +118,38 @@
     const indexColumns = payload?.indices || [];
     const metaCols = payload?.columns ? payload.columns.filter(c => !indexColumns.includes(c)) : [];
 
-    const grid = document.getElementById('analysisGrid');
+    const summaryBody = document.getElementById('summaryBody');
+    const testsBody = document.getElementById('testsBody');
+    const univariateBody = document.getElementById('univariateBody');
+    const correlationBody = document.getElementById('correlationBody');
+    const pcaBody = document.getElementById('pcaBody');
+    const profileBody = document.getElementById('profileBody');
     const mapHost = document.getElementById('mapHost');
     const mapStatus = document.getElementById('mapStatus');
+    const paletteSelector = document.getElementById('colorScale');
+
+    const colorScales = [
+      { id: 'ocean', name: 'Ocean', stops: ['#1e3a8a', '#22d3ee', '#f59e0b'] },
+      { id: 'magma', name: 'Magma', stops: ['#0f172a', '#a855f7', '#f97316'] },
+      { id: 'forest', name: 'Forest', stops: ['#064e3b', '#22c55e', '#fde047'] },
+      { id: 'sunset', name: 'Sunset', stops: ['#0f172a', '#ef4444', '#facc15'] }
+    ];
 
     function mean(arr){
       if (!arr.length) return NaN;
       return arr.reduce((a,b)=>a+b,0)/arr.length;
+    }
+
+    function stddev(arr){
+      if (arr.length < 2) return NaN;
+      const m = mean(arr);
+      const v = mean(arr.map(v => (v - m) ** 2));
+      return Math.sqrt(v);
+    }
+
+    function minMax(arr){
+      if (!arr.length) return { min: NaN, max: NaN };
+      return { min: Math.min(...arr), max: Math.max(...arr) };
     }
 
     function quantile(arr, q){
@@ -170,6 +229,12 @@
         const opt = document.createElement('option');
         opt.value = c; opt.textContent = c; idxSel.appendChild(opt);
       });
+      colorScales.forEach(scale => {
+        const opt = document.createElement('option');
+        opt.value = scale.id;
+        opt.textContent = scale.name;
+        paletteSelector.appendChild(opt);
+      });
       const badges = document.getElementById('metaBadges');
       metaCols.forEach(c => {
         const span = document.createElement('span');
@@ -213,6 +278,19 @@
         }
       }
       return makeCard('相关矩阵 (前 10 个指数)', `<div class="heatmap" style="grid-template-columns: repeat(${features.length}, 1fr);">${cells.join('')}</div>`);
+    }
+
+    function histogram(values, bins = 12){
+      if (!values.length) return null;
+      const { min, max } = minMax(values);
+      const width = (max - min) || 1;
+      const counts = Array(bins).fill(0);
+      values.forEach(v => {
+        const t = (v - min) / width;
+        const idx = Math.min(bins - 1, Math.max(0, Math.floor(t * bins)));
+        counts[idx] += 1;
+      });
+      return { min, max, counts };
     }
 
     function centerAndScale(arr){
@@ -319,6 +397,183 @@
       return makeCard('同标签内部的分布概览', table);
     }
 
+    function renderSummary(index){
+      const vals = rows.map(r => Number(r[index])).filter(v => !isNaN(v));
+      const stats = {
+        mean: mean(vals),
+        median: quantile(vals, 0.5),
+        std: stddev(vals),
+        ...minMax(vals)
+      };
+      const fmt = v => isNaN(v) ? 'NA' : v.toFixed(4);
+      const summary = `
+        <table>
+          <thead><tr><th>Index</th><th>Mean</th><th>Median</th><th>Std</th><th>Min</th><th>Max</th></tr></thead>
+          <tbody><tr><td>${index}</td><td>${fmt(stats.mean)}</td><td>${fmt(stats.median)}</td><td>${fmt(stats.std)}</td><td>${fmt(stats.min)}</td><td>${fmt(stats.max)}</td></tr></tbody>
+        </table>
+      `;
+      const labelCard = renderLabelCohorts(index).outerHTML;
+      return summary + labelCard;
+    }
+
+    function logGamma(z){
+      const p = [
+        676.5203681218851, -1259.1392167224028, 771.32342877765313,
+        -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+        9.9843695780195716e-6, 1.5056327351493116e-7
+      ];
+      if (z < 0.5) {
+        return Math.log(Math.PI) - Math.log(Math.sin(Math.PI*z)) - logGamma(1 - z);
+      }
+      z -= 1;
+      let x = 0.99999999999980993;
+      for (let i = 0; i < p.length; i++) x += p[i] / (z + i + 1);
+      const t = z + p.length - 0.5;
+      return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+    }
+
+    function betacf(a, b, x){
+      const MAX_ITER = 200;
+      const EPS = 3e-7;
+      let qab = a + b;
+      let qap = a + 1;
+      let qam = a - 1;
+      let c = 1;
+      let d = 1 - qab * x / qap;
+      if (Math.abs(d) < 1e-30) d = 1e-30;
+      d = 1 / d;
+      let h = d;
+      for (let m = 1; m <= MAX_ITER; m++) {
+        let m2 = 2 * m;
+        let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+        d = 1 + aa * d;
+        if (Math.abs(d) < 1e-30) d = 1e-30;
+        c = 1 + aa / c;
+        if (Math.abs(c) < 1e-30) c = 1e-30;
+        d = 1 / d;
+        h *= d * c;
+        aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+        d = 1 + aa * d;
+        if (Math.abs(d) < 1e-30) d = 1e-30;
+        c = 1 + aa / c;
+        if (Math.abs(c) < 1e-30) c = 1e-30;
+        d = 1 / d;
+        const del = d * c;
+        h *= del;
+        if (Math.abs(del - 1.0) < EPS) break;
+      }
+      return h;
+    }
+
+    function betai(a, b, x){
+      if (x <= 0) return 0;
+      if (x >= 1) return 1;
+      const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+      if (x < (a + 1) / (a + b + 2)) {
+        return bt * betacf(a, b, x) / a;
+      }
+      return 1 - bt * betacf(b, a, 1 - x) / b;
+    }
+
+    function fCdf(x, d1, d2){
+      if (x <= 0) return 0;
+      const xx = (d1 * x) / (d1 * x + d2);
+      return betai(d1 / 2, d2 / 2, xx);
+    }
+
+    function oneWayAnova(index){
+      const groups = groupBy('label');
+      const entries = Array.from(groups.entries())
+        .map(([label, list]) => ({
+          label,
+          values: list.map(r => Number(r[index])).filter(v => !isNaN(v))
+        }))
+        .filter(e => e.values.length);
+      const k = entries.length;
+      const n = entries.reduce((sum, e) => sum + e.values.length, 0);
+      if (k < 2 || n <= k) return null;
+      const overall = mean(entries.flatMap(e => e.values));
+      let ssb = 0;
+      let ssw = 0;
+      entries.forEach(e => {
+        const m = mean(e.values);
+        ssb += e.values.length * (m - overall) ** 2;
+        e.values.forEach(v => { ssw += (v - m) ** 2; });
+      });
+      const dfb = k - 1;
+      const dfw = n - k;
+      const msb = ssb / dfb;
+      const msw = ssw / dfw;
+      const f = msw
+        ? msb / msw
+        : (ssb > 0 ? Infinity : NaN);
+      const p = isFinite(f)
+        ? 1 - fCdf(f, dfb, dfw)
+        : (f === Infinity ? 0 : NaN);
+      const eta2 = (ssb + ssw) ? ssb / (ssb + ssw) : NaN;
+      return { f, p, dfb, dfw, eta2, k, n };
+    }
+
+    function renderPerIndexTests(){
+      const rowsHtml = indexColumns.map(idx => {
+        const res = oneWayAnova(idx);
+        if (!res) {
+          return `<tr><td>${idx}</td><td colspan="5">NA (labels不足)</td></tr>`;
+        }
+        const fmt = v => isNaN(v) ? 'NA' : v.toFixed(4);
+        return `
+          <tr>
+            <td>${idx}</td>
+            <td>F(${res.dfb}, ${res.dfw})=${fmt(res.f)}</td>
+            <td>p=${fmt(res.p)}</td>
+            <td>η²=${fmt(res.eta2)}</td>
+            <td>k=${res.k}</td>
+            <td>n=${res.n}</td>
+          </tr>
+        `;
+      }).join('');
+      return `
+        <table>
+          <thead>
+            <tr><th>Index</th><th>F-stat</th><th>p-value</th><th>Effect</th><th>Groups</th><th>Samples</th></tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      `;
+    }
+
+    function renderUnivariate(index){
+      const vals = rows.map(r => Number(r[index])).filter(v => !isNaN(v));
+      if (!vals.length) return '<div class="text-muted">No numeric values available.</div>';
+      const hist = histogram(vals, 12);
+      const maxCount = Math.max(...hist.counts);
+      const width = 360;
+      const height = 180;
+      const padding = 30;
+      const barWidth = (width - padding * 2) / hist.counts.length;
+      const bars = hist.counts.map((c, i) => {
+        const h = (c / (maxCount || 1)) * (height - padding * 2);
+        const x = padding + i * barWidth;
+        const y = height - padding - h;
+        return `<rect x="${x}" y="${y}" width="${barWidth * 0.9}" height="${h}" fill="#38bdf8" fill-opacity="0.75" />`;
+      }).join('');
+      const xLabels = [0, 0.5, 1].map(t => {
+        const v = (hist.min + (hist.max - hist.min) * t).toFixed(2);
+        const x = padding + t * (width - padding * 2);
+        return `<text x="${x}" y="${height - 8}" text-anchor="middle" font-size="10" fill="#cbd5f5">${v}</text>`;
+      }).join('');
+      const svg = `<svg width="${width}" height="${height}" style="background:#0b1530;border:1px solid #1f2937;border-radius:6px;">
+        ${bars}
+        <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" stroke="#475569" />
+        <line x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}" stroke="#475569" />
+        ${xLabels}
+      </svg>`;
+      const stats = `
+        <div class="text-muted">n=${vals.length} · mean=${mean(vals).toFixed(3)} · median=${quantile(vals,0.5).toFixed(3)} · std=${stddev(vals).toFixed(3)}</div>
+      `;
+      return `${svg}${stats}`;
+    }
+
     function renderLabelBars(index){
       const stat = computeLabelMeans(index);
       if (!stat) return makeCard('Label means', '<div class="text-muted">No label information found.</div>');
@@ -382,12 +637,32 @@
       return makeCard('Label × index heatmap', `<div class="heatmap" style="grid-template-columns: repeat(${indices.length+1},1fr);">${header}${cells.join('')}</div>`);
     }
 
+    function hexToRgb(hex){
+      const clean = hex.replace('#', '');
+      const num = parseInt(clean, 16);
+      return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    }
+
+    function mixColor(a, b, t){
+      const ar = hexToRgb(a);
+      const br = hexToRgb(b);
+      const r = Math.round(ar.r + (br.r - ar.r) * t);
+      const g = Math.round(ar.g + (br.g - ar.g) * t);
+      const bch = Math.round(ar.b + (br.b - ar.b) * t);
+      return `rgb(${r},${g},${bch})`;
+    }
+
     function valueToHeatColor(val, min, max){
+      const scaleId = paletteSelector.value || colorScales[0].id;
+      const scale = colorScales.find(s => s.id === scaleId) || colorScales[0];
       const t = (val - min) / ((max - min) || 1);
-      const r = Math.round(30 + 180 * t);
-      const g = Math.round(80 + 140 * t);
-      const b = Math.round(200 - 140 * t);
-      return `rgb(${r},${g},${b})`;
+      if (scale.stops.length === 2) {
+        return mixColor(scale.stops[0], scale.stops[1], t);
+      }
+      if (t <= 0.5) {
+        return mixColor(scale.stops[0], scale.stops[1], t * 2);
+      }
+      return mixColor(scale.stops[1], scale.stops[2], (t - 0.5) * 2);
     }
 
     function renderMapHeat(index){
@@ -429,22 +704,32 @@
     }
 
     function renderAll(){
-      grid.innerHTML = '';
       if (!rows.length) {
-        grid.appendChild(makeCard('No data found', '<div class="text-muted">从 index 页面加载 CSV/TSV 后再打开本页面。</div>'));
+        summaryBody.innerHTML = makeCard('No data found', '<div class="text-muted">从 index 页面加载 CSV/TSV 后再打开本页面。</div>').outerHTML;
+        testsBody.innerHTML = '';
+        univariateBody.innerHTML = '';
+        correlationBody.innerHTML = '';
+        pcaBody.innerHTML = '';
+        profileBody.innerHTML = '';
         return;
       }
       if (!indexColumns.length) {
-        grid.appendChild(makeCard('No numeric indices', '<div class="text-muted">请在表格中提供至少一个指数列。</div>'));
+        summaryBody.innerHTML = makeCard('No numeric indices', '<div class="text-muted">请在表格中提供至少一个指数列。</div>').outerHTML;
+        testsBody.innerHTML = '';
+        univariateBody.innerHTML = '';
+        correlationBody.innerHTML = '';
+        pcaBody.innerHTML = '';
+        profileBody.innerHTML = '';
         return;
       }
       const index = document.getElementById('indexSelector').value || indexColumns[0];
       const k = Number(document.getElementById('clusterInput').value) || 3;
-      grid.appendChild(renderLabelCohorts(index));
-      grid.appendChild(renderLabelBars(index));
-      grid.appendChild(renderLabelIndexHeatmap());
-      grid.appendChild(renderCorrelation(indexColumns.slice(0,10)));
-      grid.appendChild(renderPCA(indexColumns, k));
+      summaryBody.innerHTML = renderSummary(index);
+      testsBody.innerHTML = renderPerIndexTests();
+      univariateBody.innerHTML = renderUnivariate(index);
+      correlationBody.innerHTML = renderCorrelation(indexColumns.slice(0, 10)).outerHTML;
+      pcaBody.innerHTML = `${renderLabelBars(index).outerHTML}${renderPCA(indexColumns, k).outerHTML}`;
+      profileBody.innerHTML = renderLabelIndexHeatmap().outerHTML;
       renderMapHeat(index);
     }
 
@@ -452,10 +737,9 @@
       renderMeta();
       const idxSel = document.getElementById('indexSelector');
       if (indexColumns.length && !idxSel.value) idxSel.value = indexColumns[0];
-      idxSel.addEventListener('change', () => {
-        renderAll();
-      });
+      idxSel.addEventListener('change', renderAll);
       document.getElementById('clusterInput').addEventListener('change', renderAll);
+      paletteSelector.addEventListener('change', renderAll);
       renderAll();
     } else {
       renderAll();
