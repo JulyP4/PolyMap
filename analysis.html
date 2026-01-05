@@ -504,8 +504,12 @@
       const dfw = n - k;
       const msb = ssb / dfb;
       const msw = ssw / dfw;
-      const f = msw ? msb / msw : NaN;
-      const p = isFinite(f) ? 1 - fCdf(f, dfb, dfw) : NaN;
+      const f = msw
+        ? msb / msw
+        : (ssb > 0 ? Infinity : NaN);
+      const p = isFinite(f)
+        ? 1 - fCdf(f, dfb, dfw)
+        : (f === Infinity ? 0 : NaN);
       const eta2 = (ssb + ssw) ? ssb / (ssb + ssw) : NaN;
       return { f, p, dfb, dfw, eta2, k, n };
     }
