@@ -19,7 +19,7 @@ Optional:
   --label-col label
   --include-cols anisotropy skewness
   --exclude-cols some_col1 some_col2
-  --label-order PC GC Top Mid Btm RH DZ EZ TZ MZ RT
+  --label-order PC GC Top Mid Btm RH DZ EZ TZ MZ
 """
 
 from __future__ import annotations

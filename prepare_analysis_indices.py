@@ -23,7 +23,7 @@ FOLDER_KEY_MAP = {
     "Lifeact-root/elongation": "EZ",
     "Lifeact-root/meristem": "MZ",
     "Lifeact-root/transition": "TZ",
-    "Lifeact-roothair": "RT",
+    "Lifeact-roothair": "RH",
 }
 
 METRIC_GROUPS = {
